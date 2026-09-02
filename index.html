@@ -1,0 +1,1964 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BraiPay WebUSB POS & Bank Terminal</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{
+  --bg:#0a0a0f;--bg2:#12121a;--bg3:#1a1a28;--bg4:#22223a;
+  --text:#e8e8f0;--text2:#a0a0b8;--text3:#6a6a82;
+  --purple:#635BFF;--purple2:#7C75FF;--purple3:#4840CC;
+  --green:#10B981;--green2:#34D399;--red:#EF4444;--orange:#F59E0B;
+  --blue:#3B82F6;--cyan:#06B6D4;--gold:#D4AF37;
+  --border:#2a2a3e;--radius:12px;
+}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;display:flex}
+a{color:var(--purple2);text-decoration:none}
+
+/* Sidebar */
+.sidebar{width:230px;background:var(--bg2);border-right:1px solid var(--border);display:flex;flex-direction:column;position:fixed;top:0;left:0;bottom:0;z-index:10}
+.sidebar-logo{padding:20px 16px;border-bottom:1px solid var(--border);text-align:center}
+.sidebar-logo h1{font-size:20px;font-weight:900;background:linear-gradient(135deg,var(--purple),var(--cyan));-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.sidebar-logo span{font-size:10px;color:var(--text3);display:block;margin-top:2px}
+.sidebar-nav{flex:1;padding:12px 8px;overflow-y:auto}
+.nav-item{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:8px;cursor:pointer;color:var(--text2);font-size:13px;font-weight:500;margin-bottom:3px;transition:all .2s}
+.nav-item:hover{background:var(--bg3);color:var(--text)}
+.nav-item.active{background:var(--purple);color:#fff;font-weight:700}
+.nav-item .icon{font-size:16px;width:22px;text-align:center}
+.sidebar-footer{padding:12px;border-top:1px solid var(--border);display:flex;flex-direction:column;gap:8px}
+.conn-badge{display:flex;align-items:center;gap:8px;padding:8px 12px;border-radius:8px;background:var(--bg3);font-size:11px}
+.conn-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.conn-dot.connected{background:var(--green);box-shadow:0 0 8px var(--green)}
+.conn-dot.demo{background:var(--orange);box-shadow:0 0 8px var(--orange)}
+.conn-dot.disconnected{background:var(--red)}
+
+/* Main Content */
+.main{margin-left:230px;flex:1;min-height:100vh;display:flex;flex-direction:column}
+.topbar{height:60px;background:var(--bg2);border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;padding:0 24px;position:sticky;top:0;z-index:5}
+.topbar-title{font-size:16px;font-weight:800;color:var(--text);display:flex;align-items:center;gap:8px}
+.topbar-actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.btn{padding:8px 16px;border-radius:8px;border:none;cursor:pointer;font-size:12px;font-weight:700;transition:all .2s;display:inline-flex;align-items:center;gap:6px}
+.btn-primary{background:var(--purple);color:#fff}.btn-primary:hover{background:var(--purple2)}
+.btn-success{background:var(--green);color:#fff}.btn-success:hover{background:var(--green2)}
+.btn-danger{background:var(--red);color:#fff}
+.btn-gold{background:linear-gradient(135deg,#D4AF37,#AA7C11);color:#000;font-weight:800}
+.btn-outline{background:transparent;border:1px solid var(--border);color:var(--text2)}.btn-outline:hover{border-color:var(--purple);color:var(--purple)}
+.btn-sm{padding:5px 10px;font-size:11px}
+.badge{padding:3px 8px;border-radius:10px;font-size:10px;font-weight:700;display:inline-block}
+.badge-green{background:rgba(16,185,129,.15);color:var(--green)}
+.badge-red{background:rgba(239,68,68,.15);color:var(--red)}
+.badge-orange{background:rgba(245,158,11,.15);color:var(--orange)}
+.badge-purple{background:rgba(99,91,255,.15);color:var(--purple)}
+.badge-blue{background:rgba(59,130,246,.15);color:var(--blue)}
+.badge-gold{background:rgba(212,175,55,.15);color:var(--gold)}
+.currency-toggle{display:flex;border-radius:8px;overflow:hidden;border:1px solid var(--border)}
+.currency-toggle button{padding:6px 14px;border:none;cursor:pointer;font-size:11px;font-weight:700;background:var(--bg3);color:var(--text2);transition:all .2s}
+.currency-toggle button.active{background:var(--purple);color:#fff}
+
+/* Tab Content */
+.tab-content{display:none;padding:24px;flex:1}
+.tab-content.active{display:block}
+.section-title{font-size:18px;font-weight:800;margin-bottom:16px;display:flex;align-items:center;gap:10px}
+
+/* Stats Grid */
+.stats-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:14px;margin-bottom:24px}
+.stat-card{background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:18px;transition:all .3s}
+.stat-card:hover{border-color:var(--purple);transform:translateY(-2px)}
+.stat-card .label{font-size:11px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.5px}
+.stat-card .value{font-size:26px;font-weight:900;margin-top:4px;background:linear-gradient(135deg,var(--purple),var(--cyan));-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.stat-card .sub{font-size:11px;color:var(--text2);margin-top:2px}
+
+/* Product Grid */
+.product-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px}
+.product-card{background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:16px;cursor:pointer;transition:all .2s;display:flex;flex-direction:column;justify-content:space-between}
+.product-card:hover{border-color:var(--purple);transform:scale(1.02)}
+.product-card .emoji{font-size:32px;margin-bottom:8px}
+.product-card .name{font-size:13px;font-weight:700}
+.product-card .price{font-size:16px;font-weight:800;color:var(--green);margin-top:4px}
+.product-card .cat{font-size:10px;color:var(--text3);margin-top:4px}
+.product-card .add-btn{margin-top:10px;width:100%;padding:6px;border-radius:6px;border:1px solid var(--purple);background:transparent;color:var(--purple);font-size:11px;font-weight:700;cursor:pointer;transition:all .2s}
+.product-card .add-btn:hover{background:var(--purple);color:#fff}
+
+/* Cards Section */
+.cards-row{display:flex;gap:16px;overflow-x:auto;padding-bottom:10px}
+.bank-card{min-width:320px;height:190px;border-radius:16px;padding:20px;position:relative;overflow:hidden;flex-shrink:0;display:flex;flex-direction:column;justify-content:space-between;cursor:pointer;transition:all .3s}
+.bank-card:hover{transform:scale(1.03);box-shadow:0 8px 32px rgba(99,91,255,.3)}
+.bank-card .card-chip{font-size:24px}
+.bank-card .card-number{font-size:16px;font-weight:700;letter-spacing:3px;font-family:'Courier New',monospace}
+.bank-card .card-bottom{display:flex;justify-content:space-between;align-items:flex-end}
+.bank-card .card-holder{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px}
+.bank-card .card-expiry{font-size:10px;color:rgba(255,255,255,.7)}
+.bank-card .card-balance{position:absolute;top:18px;right:20px;font-size:17px;font-weight:800}
+.bank-card .card-provider{position:absolute;bottom:18px;right:20px;font-size:11px;font-weight:700;opacity:.8}
+.bank-card .card-nfc{position:absolute;top:50px;right:20px;font-size:10px;opacity:.7}
+
+/* Terminal */
+.terminal-panel{display:grid;grid-template-columns:1fr 380px;gap:20px}
+.terminal-left{display:flex;flex-direction:column;gap:16px}
+.terminal-right{display:flex;flex-direction:column;gap:16px}
+.amount-display{background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:24px;text-align:center}
+.amount-display .curr-label{font-size:12px;color:var(--text3);font-weight:600}
+.amount-display .amount{font-size:48px;font-weight:900;background:linear-gradient(135deg,var(--green),var(--cyan));-webkit-background-clip:text;-webkit-text-fill-color:transparent;font-family:'Courier New',monospace}
+.amount-input{width:100%;padding:12px;border-radius:8px;border:1px solid var(--border);background:var(--bg3);color:var(--text);font-size:18px;font-weight:700;text-align:center;margin-top:10px}
+.amount-input:focus{outline:none;border-color:var(--purple)}
+
+.nfc-panel{background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:20px;text-align:center}
+.nfc-anim{width:80px;height:80px;margin:12px auto;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:36px;position:relative}
+.nfc-anim.waiting{animation:nfcPulse 2s infinite}
+.nfc-anim.success{background:rgba(16,185,129,.15);border:2px solid var(--green)}
+.nfc-anim.error{background:rgba(239,68,68,.15);border:2px solid var(--red)}
+.nfc-anim.idle{background:var(--bg3);border:2px solid var(--border)}
+@keyframes nfcPulse{
+  0%{box-shadow:0 0 0 0 rgba(99,91,255,.5);border:2px solid var(--purple)}
+  70%{box-shadow:0 0 0 20px rgba(99,91,255,0)}
+  100%{box-shadow:0 0 0 0 rgba(99,91,255,0)}
+}
+.nfc-status-text{font-size:13px;font-weight:700;margin-top:8px}
+
+.cart-panel{background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:16px}
+.cart-item{display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border);font-size:12px}
+.cart-item:last-child{border-bottom:none}
+.cart-total{display:flex;justify-content:space-between;padding:12px 0 0;border-top:2px solid var(--purple);margin-top:8px;font-size:16px;font-weight:800}
+
+/* Transaction Result */
+.tx-result{background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:18px;text-align:center;display:none}
+.tx-result.show{display:block}
+.tx-result.success{border-color:var(--green)}
+.tx-result.error{border-color:var(--red)}
+.tx-result .result-icon{font-size:44px;margin-bottom:6px}
+.tx-result .result-text{font-size:15px;font-weight:800}
+.tx-result .result-details{font-size:11px;color:var(--text2);margin-top:6px;white-space:pre-line}
+
+/* Forms */
+.form-card{background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:20px;margin-bottom:18px}
+.form-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px}
+.field{display:flex;flex-direction:column;gap:5px}
+.field label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text3)}
+.field input,.field select{padding:9px 12px;border-radius:8px;border:1px solid var(--border);background:var(--bg3);color:var(--text);font-size:13px;width:100%}
+.field input:focus,.field select:focus{outline:none;border-color:var(--purple)}
+.field input[type=color]{padding:3px;height:38px;cursor:pointer}
+.field .hint{font-size:10px;color:var(--text3)}
+.form-actions{display:flex;gap:10px;margin-top:14px;flex-wrap:wrap}
+.form-msg{margin-top:12px;padding:11px 14px;border-radius:8px;font-size:12px;font-weight:600;display:none}
+.form-msg.show{display:block}
+.form-msg.ok{background:rgba(76,175,80,.14);border:1px solid var(--green);color:var(--green)}
+.form-msg.bad{background:rgba(244,67,54,.14);border:1px solid var(--red);color:var(--red)}
+
+/* Tables */
+.history-table{width:100%;border-collapse:separate;border-spacing:0}
+.history-table th{text-align:left;padding:10px 14px;font-size:11px;color:var(--text3);font-weight:700;text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid var(--border);background:var(--bg2)}
+.history-table td{padding:10px 14px;font-size:12px;border-bottom:1px solid var(--border)}
+.history-table tr:hover td{background:var(--bg3)}
+
+/* Log Panel */
+.log-panel{background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:14px;max-height:320px;overflow-y:auto;font-family:'Courier New',monospace;font-size:11px}
+.log-entry{padding:3px 0;color:var(--text2)}
+.log-entry.cmd{color:var(--cyan)}
+.log-entry.resp{color:var(--green)}
+.log-entry.err{color:var(--red)}
+.log-entry.info{color:var(--orange)}
+
+/* Simple Mode Fullscreen Overlay */
+.simple-container{display:none;background:var(--bg);position:fixed;top:0;left:0;right:0;bottom:0;z-index:100;padding:24px;overflow-y:auto}
+.simple-container.active{display:flex;flex-direction:column}
+.simple-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;padding-bottom:12px;border-bottom:1px solid var(--border)}
+.simple-body{display:grid;grid-template-columns:1fr 1fr;gap:24px;flex:1}
+.simple-keypad{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:14px}
+.simple-key{padding:18px;font-size:22px;font-weight:800;border-radius:12px;border:1px solid var(--border);background:var(--bg2);color:var(--text);cursor:pointer;transition:all .15s}
+.simple-key:hover{background:var(--purple);color:#fff}
+.simple-quick-products{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}
+.simple-prod-btn{padding:20px 14px;border-radius:12px;border:1px solid var(--border);background:var(--bg2);color:var(--text);cursor:pointer;text-align:center;font-weight:700;transition:all .15s}
+.simple-prod-btn:hover{border-color:var(--purple);transform:scale(1.02)}
+
+/* Bank Card Cool Styles */
+.cards-row { display: flex; gap: 16px; overflow-x: auto; padding-bottom: 10px; margin-bottom: 20px; }
+.bank-card { width: 320px; min-width: 320px; height: 190px; border-radius: 16px; padding: 20px; color: white; display: flex; flex-direction: column; justify-content: space-between; position: relative; overflow: hidden; box-shadow: 0 10px 20px rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.1); cursor: pointer; transition: transform 0.2s, box-shadow 0.2s; }
+.bank-card:hover { transform: translateY(-4px); box-shadow: 0 14px 28px rgba(0,0,0,0.4); }
+.bank-card::before { content: ""; position: absolute; top: -50%; left: -50%; width: 200%; height: 200%; background: radial-gradient(circle, rgba(255,255,255,0.15) 0%, transparent 60%); pointer-events: none; }
+.card-chip { font-size: 28px; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.4)); margin-bottom: 10px; }
+.card-number { font-family: 'Courier New', monospace; font-size: 20px; font-weight: 700; letter-spacing: 3px; text-shadow: 0 2px 4px rgba(0,0,0,0.5); margin-bottom: 14px; }
+.card-balance { font-size: 24px; font-weight: 800; text-shadow: 0 2px 4px rgba(0,0,0,0.6); }
+.card-nfc { position: absolute; top: 20px; right: 20px; font-size: 11px; background: rgba(0,0,0,0.4); padding: 4px 8px; border-radius: 12px; font-family: monospace; }
+.card-bottom { display: flex; justify-content: space-between; align-items: flex-end; }
+.card-holder { font-size: 15px; text-transform: uppercase; font-weight: 800; letter-spacing: 1px; text-shadow: 0 1px 2px rgba(0,0,0,0.6); }
+.card-expiry { font-size: 11px; opacity: 0.9; font-family: monospace; margin-top: 2px; }
+.card-provider { font-size: 20px; font-weight: 900; font-style: italic; text-shadow: 0 2px 4px rgba(0,0,0,0.6); }
+
+/* Bank Hub Display */
+.bank-hub-card { display: flex; flex-direction: column; align-items: center; justify-content: center; background: linear-gradient(135deg, var(--bg2), var(--bg3)); border: 2px solid var(--border); border-radius: 20px; padding: 40px; margin-bottom: 24px; text-align: center; }
+.bank-hub-card .bh-balance { font-size: 64px; font-weight: 900; background: linear-gradient(135deg, var(--gold), #FFF); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+.bank-hub-card .bh-holder { font-size: 24px; font-weight: 700; color: var(--text); margin-top: 10px; }
+.bank-hub-card .bh-iban { font-family: monospace; color: var(--text3); font-size: 14px; margin-top: 5px; }
+
+@media(max-width:900px){
+  .sidebar{width:60px}.sidebar-nav .nav-label{display:none}.sidebar-logo h1{font-size:12px}.sidebar-logo span{display:none}
+  .main{margin-left:60px}
+  .terminal-panel{grid-template-columns:1fr}
+  .simple-body{grid-template-columns:1fr}
+}
+@media(max-width:600px){.sidebar{display:none}.main{margin-left:0}}
+::-webkit-scrollbar{width:6px}::-webkit-scrollbar-track{background:var(--bg)}::-webkit-scrollbar-thumb{background:var(--bg4);border-radius:3px}
+</style>
+</head>
+<body>
+
+<!-- Sidebar -->
+<div class="sidebar">
+  <div class="sidebar-logo">
+    <h1>💳 BraiPay</h1>
+    <span>WebUSB POS & Bank v1.1</span>
+  </div>
+  <div class="sidebar-nav">
+    <div class="nav-item active" onclick="switchTab('dashboard')"><span class="icon">📊</span><span class="nav-label">Dashboard</span></div>
+    <div class="nav-item" onclick="switchTab('terminal')"><span class="icon">🏪</span><span class="nav-label">Terminal POS</span></div>
+    <div class="nav-item" onclick="switchTab('products')"><span class="icon">🛒</span><span class="nav-label">Products</span></div>
+    <div class="nav-item" onclick="switchTab('cards')"><span class="icon">💳</span><span class="nav-label">Cards</span></div>
+    <div class="nav-item" onclick="switchTab('bank')"><span class="icon">🏦</span><span class="nav-label">Bank Mode</span></div>
+    <div class="nav-item" onclick="switchTab('send')"><span class="icon">💸</span><span class="nav-label">Send Money</span></div>
+    <div class="nav-item" onclick="switchTab('history')"><span class="icon">📋</span><span class="nav-label">History</span></div>
+    <div class="nav-item" onclick="switchTab('log')"><span class="icon">🔌</span><span class="nav-label">USB Log</span></div>
+  </div>
+  <div class="sidebar-footer">
+    <button class="btn btn-outline btn-sm" style="width:100%;justify-content:center" onclick="toggleSimpleMode(true)">⚡ Simple Mode</button>
+    <div class="conn-badge" id="connBadge">
+      <span class="conn-dot disconnected" id="connDot"></span>
+      <span id="connText">Disconnected</span>
+    </div>
+  </div>
+</div>
+
+<!-- Main Content -->
+<div class="main">
+  <div class="topbar">
+    <span class="topbar-title" id="tabTitle">📊 Dashboard</span>
+    <div class="topbar-actions">
+      <div class="currency-toggle">
+        <button class="active" id="btnRSD" onclick="setCurrency('RSD')">🇷🇸 RSD</button>
+        <button id="btnEUR" onclick="setCurrency('EUR')">🇪🇺 EUR</button>
+      </div>
+      <button class="btn btn-outline btn-sm" onclick="toggleSimpleMode(true)">⚡ Simple POS</button>
+      <button class="btn btn-primary" id="btnConnect" onclick="connectUSB()">🔌 Connect USB</button>
+      <button class="btn btn-primary" id="btnConnectBle" onclick="connectBLE()">📶 Connect Bluetooth</button>
+      <button class="btn btn-outline btn-sm" onclick="loadDemoData()">🎮 Demo Mode</button>
+    </div>
+  </div>
+
+  <!-- Dashboard Tab -->
+  <div class="tab-content active" id="tab-dashboard">
+    <div class="stats-grid">
+      <div class="stat-card"><div class="label">Products</div><div class="value" id="statProducts">0</div><div class="sub">In catalog</div></div>
+      <div class="stat-card"><div class="label">Active Cards</div><div class="value" id="statCards">0</div><div class="sub">Registered accounts</div></div>
+      <div class="stat-card"><div class="label">Today Revenue</div><div class="value" id="statRevenue">0</div><div class="sub" id="statRevenueCurr">RSD</div></div>
+      <div class="stat-card"><div class="label">Transactions</div><div class="value" id="statTx">0</div><div class="sub">Completed total</div></div>
+    </div>
+    
+    <div class="section-title">📡 Live Connection & POS Info</div>
+    <div class="form-card">
+      <div class="form-grid">
+        <div class="field"><label>Connection Mode</label><div style="font-weight:700" id="infoMode">Disconnected</div></div>
+        <div class="field"><label>USB Device</label><div style="font-weight:700" id="infoDevice">—</div></div>
+        <div class="field"><label>Business Name</label><div style="font-weight:700" id="infoBusiness">—</div></div>
+        <div class="field"><label>Terminal Currency</label><div style="font-weight:700" id="infoCurrency">—</div></div>
+        <div class="field"><label>Checkout State</label><div style="font-weight:700" id="infoCheckout">Idle</div></div>
+        <div class="field"><label>Bank Mode Status</label><div style="font-weight:700" id="infoBankStatus">Disabled</div></div>
+        <div class="field"><label>Last NFC Hardware Tap</label><div style="font-weight:700;color:var(--cyan)" id="infoNfc">—</div></div>
+      </div>
+    </div>
+
+    <div class="section-title">⚡ Quick Navigation</div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap">
+      <button class="btn btn-primary" onclick="switchTab('terminal')">🏪 Open POS Terminal</button>
+      <button class="btn btn-gold" onclick="switchTab('bank')">🏦 Enter Bank Hub</button>
+      <button class="btn btn-success" onclick="switchTab('send')">💸 Send Money to Player</button>
+      <button class="btn btn-outline" onclick="sendCmd({cmd:'PING'})">🏓 Ping Device</button>
+    </div>
+  </div>
+
+  <!-- Terminal POS Tab -->
+  <div class="tab-content" id="tab-terminal">
+    <div class="section-title">🏪 Payment Terminal & NFC Tap</div>
+    <div class="terminal-panel">
+      <div class="terminal-left">
+        <!-- Terminal Payout Recipient -->
+        <div class="form-card" style="margin-bottom:0;padding:14px">
+          <div class="field">
+            <label>💰 Terminal Recipient / Payout To</label>
+            <select id="termRecipientSelect" onchange="updateTerminalRecipient()">
+              <option value="-1">🏪 Merchant Store (Default)</option>
+            </select>
+            <span class="hint">Select another player's card to send this POS charge directly to them!</span>
+          </div>
+        </div>
+
+        <div class="amount-display">
+          <div class="curr-label" id="termCurrLabel">Amount in RSD</div>
+          <div class="amount" id="termAmount">0.00</div>
+          <input type="number" class="amount-input" id="customAmountInput" placeholder="Enter custom amount..." step="0.01" oninput="updateCustomAmount()">
+        </div>
+
+        <div class="cart-panel">
+          <h3 style="font-size:14px;font-weight:700;margin-bottom:10px">🛒 Cart Items</h3>
+          <div id="cartItems"><div style="color:var(--text3);font-size:12px;padding:10px;text-align:center">Cart is empty. Add products from the Products tab.</div></div>
+          <div class="cart-total"><span>Total</span><span id="cartTotal">0.00 RSD</span></div>
+        </div>
+
+        <div style="display:flex;gap:10px">
+          <button class="btn btn-success" style="flex:1;padding:14px;font-size:16px" onclick="initiatePayment()">💳 Pay at Terminal</button>
+          <button class="btn btn-danger btn-sm" onclick="cancelPayment()">✕ Cancel</button>
+          <button class="btn btn-outline btn-sm" onclick="clearCart()">🗑️ Clear</button>
+        </div>
+      </div>
+
+      <div class="terminal-right">
+        <div class="nfc-panel" id="nfcPanel">
+          <h3 style="font-size:14px;font-weight:700;margin-bottom:6px">📡 NFC Status</h3>
+          <div class="nfc-anim idle" id="nfcAnim">📱</div>
+          <div class="nfc-status-text" id="nfcStatusText">Idle — Ready for payment</div>
+          <p style="font-size:10px;color:var(--text3);margin-top:8px">Tap physical card or watch against phone back to complete</p>
+        </div>
+
+        <!-- NFC Simulator Box -->
+        <div class="form-card" style="padding:14px">
+          <h4 style="font-size:12px;font-weight:700;margin-bottom:8px">⚡ Simulate NFC Hardware Tap</h4>
+          <div style="display:flex;gap:8px">
+            <input type="text" id="simNfcUid" placeholder="04:A2:8B:1F" value="04:A2:8B:1F" style="flex:1;padding:6px 10px;border-radius:6px;border:1px solid var(--border);background:var(--bg3);color:var(--text);font-size:12px;font-family:monospace">
+            <button class="btn btn-primary btn-sm" onclick="simulateNfcTapInput()">📡 Tap</button>
+          </div>
+          <div style="display:flex;gap:6px;margin-top:8px">
+            <button class="btn btn-outline btn-sm" style="flex:1;font-size:10px" onclick="setSimUid('WATCH:SHEALTH:OOB')">⌚ Galaxy Watch</button>
+            <button class="btn btn-outline btn-sm" style="flex:1;font-size:10px" onclick="setSimUid('04:A2:8B:1F')">💳 Card Chip 1</button>
+          </div>
+        </div>
+
+        <div class="tx-result" id="txResult">
+          <div class="result-icon" id="resultIcon">✅</div>
+          <div class="result-text" id="resultText">Payment Successful</div>
+          <div class="result-details" id="resultDetails"></div>
+        </div>
+
+        <div class="form-card" style="padding:14px">
+          <h4 style="font-size:12px;font-weight:700;margin-bottom:8px">💳 Instant Charge Player Card</h4>
+          <div id="quickPayCards" style="display:flex;flex-direction:column;gap:6px">
+            <p style="font-size:11px;color:var(--text3)">Connect to device to see cards</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Bank Mode Tab -->
+  <div class="tab-content" id="tab-bank">
+    <div class="section-title">🏦 Bank Hub & Account Portal <span class="badge badge-gold" id="bankModeBadge">Active</span></div>
+    
+    <div class="bank-hub-card">
+      <div style="font-size:14px;color:var(--text3);text-transform:uppercase;letter-spacing:2px;margin-bottom:10px" id="bankNameDisplay">Raiffeisen Bank</div>
+      <div class="bh-balance" id="bankAccountBalance">0.00 RSD</div>
+      <div class="bh-holder" id="bankAccountHolder">—</div>
+      <div class="bh-iban" id="bankIbanDisplay">IBAN: RS35-2650-0000-1234</div>
+    </div>
+
+    <div class="stats-grid" style="margin-bottom:24px">
+      <div class="stat-card">
+        <div class="label">Active Loan / Debt</div>
+        <div class="value" style="color:var(--red)" id="bankDebtDisplay">0 RSD</div>
+        <div class="sub">10% Kamata per month</div>
+      </div>
+      <div class="stat-card">
+        <div class="label">Total Account Cards</div>
+        <div class="value" id="bankCardCountDisplay">0</div>
+        <div class="sub">Linked to this bank</div>
+      </div>
+    </div>
+
+    <!-- Bank Configuration -->
+    <div class="section-title">⚙️ Bank Mode Configuration</div>
+    <div class="form-card">
+      <div class="form-grid">
+        <div class="field">
+          <label>Connected Card Account</label>
+          <select id="bankCardSelect" onchange="onBankCardChange()"></select>
+        </div>
+        <div class="field">
+          <label>Bank Name / Provider</label>
+          <input type="text" id="bankProviderInput" value="Raiffeisen Bank">
+        </div>
+        <div class="field">
+          <label>Custom IBAN</label>
+          <input type="text" id="bankIbanInput" value="RS35-2650-0000-1234">
+        </div>
+      </div>
+      <div class="form-actions">
+        <button class="btn btn-primary" onclick="saveBankConnection()">💾 Save Bank Connection</button>
+        <button class="btn btn-outline btn-sm" onclick="sendCmd({cmd:'GET_STATUS'})">🔄 Sync Status</button>
+      </div>
+      <div class="form-msg" id="bankConfigMsg"></div>
+    </div>
+
+    <!-- Loan / Credit Debt System -->
+    <div class="section-title">💰 Loan & Credit Line Management</div>
+    <div class="form-card">
+      <p style="font-size:12px;color:var(--text2);margin-bottom:14px">
+        Take a revolving bank loan to instantly increase account balance. Automatic 10% monthly interest applies.
+      </p>
+      <div class="form-grid">
+        <div class="field">
+          <label>Target Card Account</label>
+          <select id="loanCardSelect"></select>
+        </div>
+        <div class="field">
+          <label>Loan Amount</label>
+          <input type="number" id="loanAmountInput" placeholder="5000" step="100">
+        </div>
+      </div>
+      <div class="form-actions">
+        <button class="btn btn-gold" onclick="applyForLoan()">💵 Take Loan</button>
+        <button class="btn btn-success" onclick="repayLoan()">✅ Repay Debt</button>
+        <button class="btn btn-outline btn-sm" onclick="setQuickLoan(5000)">+5,000</button>
+        <button class="btn btn-outline btn-sm" onclick="setQuickLoan(20000)">+20,000</button>
+        <button class="btn btn-outline btn-sm" onclick="setQuickLoan(50000)">+50,000</button>
+      </div>
+      <div class="form-msg" id="loanMsg"></div>
+    </div>
+  </div>
+
+  <!-- Products Tab -->
+  <div class="tab-content" id="tab-products">
+    <div class="section-title">🛒 Product Catalog <span class="badge badge-purple" id="productCount">0 items</span></div>
+    <div style="margin-bottom:14px;display:flex;gap:10px">
+      <input type="text" id="productSearch" placeholder="Search products..." style="flex:1;padding:8px 14px;border-radius:8px;border:1px solid var(--border);background:var(--bg3);color:var(--text);font-size:12px" oninput="filterProducts()">
+      <select id="categoryFilter" style="padding:8px 14px;border-radius:8px;border:1px solid var(--border);background:var(--bg3);color:var(--text);font-size:12px" onchange="filterProducts()">
+        <option value="">All Categories</option>
+      </select>
+    </div>
+    <div class="product-grid" id="productGrid"></div>
+
+    <div class="section-title" style="margin-top:24px">➕ Add Product to Catalog</div>
+    <div class="form-card">
+      <div class="form-grid">
+        <div class="field"><label>Product name</label><input type="text" id="npName" placeholder="e.g. Big Mac Meal"></div>
+        <div class="field"><label>Price (RSD)</label><input type="number" id="npPrice" step="0.01" placeholder="820"></div>
+        <div class="field"><label>Category</label><input type="text" id="npCategory" placeholder="Meals" list="categoryOptions">
+          <datalist id="categoryOptions"></datalist>
+        </div>
+      </div>
+      <div class="form-actions">
+        <button class="btn btn-primary" onclick="submitAddProduct()">➕ Add Product</button>
+        <button class="btn btn-outline btn-sm" onclick="sendCmd({cmd:'GET_PRODUCTS'})">🔄 Refresh</button>
+      </div>
+      <div class="form-msg" id="npMsg"></div>
+    </div>
+  </div>
+
+  <!-- Cards Tab -->
+  <div class="tab-content" id="tab-cards">
+    <div class="section-title">💳 Payment Cards <span class="badge badge-green" id="cardCount">0 cards</span></div>
+    <div class="cards-row" id="cardsRow"></div>
+    <div style="margin-top:20px">
+      <div class="section-title">📊 Card Details</div>
+      <table class="history-table" id="cardDetailsTable">
+        <thead><tr><th>Holder</th><th>Number</th><th>Bank</th><th>Balance</th><th>Currency</th><th>Chip ID</th><th>Type</th></tr></thead>
+        <tbody id="cardDetailsBody"></tbody>
+      </table>
+    </div>
+
+    <div class="section-title" style="margin-top:24px">➕ Add New Card</div>
+    <div class="form-card">
+      <div class="form-grid">
+        <div class="field"><label>Card holder</label><input type="text" id="ncHolder" placeholder="BRANKO POPOVIC"></div>
+        <div class="field"><label>Card number</label><input type="text" id="ncNumber" placeholder="4120 8547 3621 9054" maxlength="23">
+          <span class="hint">4… Visa · 5… Mastercard · 9880… DinaCard</span></div>
+        <div class="field"><label>Chip ID (NFC)</label><input type="text" id="ncUid" placeholder="04:A2:8B:1F">
+          <span class="hint">Enter tag UID, or 'WATCH:SHEALTH:OOB' for Galaxy Watch</span></div>
+        <div class="field"><label>Starting balance</label><input type="number" id="ncBalance" step="0.01" value="0"></div>
+        <div class="field"><label>Currency</label>
+          <select id="ncCurrency"><option value="RSD">🇷🇸 RSD</option><option value="EUR">🇪🇺 EUR</option></select>
+          <span class="hint">DinaCard numbers (9880…) can only pay in RSD</span></div>
+        <div class="field"><label>Card colour</label><input type="color" id="ncColor" value="#6200EE"></div>
+        <div class="field"><label>Bank password</label><input type="text" id="ncPassword" placeholder="Used for BankHub login"></div>
+      </div>
+      <div class="form-actions">
+        <button class="btn btn-success" onclick="submitAddCard()">➕ Create Card</button>
+        <button class="btn btn-outline btn-sm" onclick="fillRandomCardNumber()">🎲 Random number</button>
+        <button class="btn btn-outline btn-sm" onclick="sendCmd({cmd:'GET_CARDS'})">🔄 Refresh</button>
+      </div>
+      <div class="form-msg" id="ncMsg"></div>
+    </div>
+  </div>
+
+  <!-- Send Money Tab -->
+  <div class="tab-content" id="tab-send">
+    <div class="section-title">💸 Send Money to Another Player</div>
+    <div class="form-card" style="max-width:760px">
+      <div class="form-grid" style="grid-template-columns:1fr auto 1fr;align-items:end">
+        <div class="field"><label>From (sender card)</label><select id="sendFrom" onchange="renderSendPreview()"></select>
+          <span class="hint" id="sendFromHint">—</span></div>
+        <div style="font-size:22px;color:var(--purple);text-align:center;padding-bottom:12px">➡️</div>
+        <div class="field"><label>To (recipient card)</label><select id="sendTo" onchange="renderSendPreview()"></select>
+          <span class="hint" id="sendToHint">—</span></div>
+      </div>
+      <div class="form-grid" style="margin-top:14px">
+        <div class="field"><label>Amount</label><input type="number" id="sendAmount" step="0.01" placeholder="0.00" oninput="renderSendPreview()">
+          <span class="hint" id="sendAmountHint">Amount is taken in the sender's currency</span></div>
+      </div>
+      <div class="form-actions">
+        <button class="btn btn-success" onclick="sendMoney()">💸 Send Money</button>
+        <button class="btn btn-outline btn-sm" onclick="swapSendCards()">🔁 Swap</button>
+        <button class="btn btn-outline btn-sm" onclick="sendCmd({cmd:'GET_CARDS'})">🔄 Refresh cards</button>
+      </div>
+      <div class="form-msg" id="sendMsg"></div>
+    </div>
+  </div>
+
+  <!-- History Tab -->
+  <div class="tab-content" id="tab-history">
+    <div class="section-title">📋 Transaction History <span class="badge badge-blue" id="txCount">0 transactions</span></div>
+    <table class="history-table">
+      <thead><tr><th>ID</th><th>Product</th><th>Amount</th><th>Currency</th><th>Status</th><th>Method</th><th>Date</th></tr></thead>
+      <tbody id="historyBody"></tbody>
+    </table>
+  </div>
+
+  <!-- USB Log Tab -->
+  <div class="tab-content" id="tab-log">
+    <div class="section-title">🔌 USB Communication Log</div>
+    <div style="display:flex;gap:10px;margin-bottom:14px">
+      <button class="btn btn-outline btn-sm" onclick="clearLog()">🗑️ Clear Log</button>
+      <button class="btn btn-outline btn-sm" onclick="sendCmd({cmd:'PING'})">🏓 Send Ping</button>
+      <button class="btn btn-outline btn-sm" onclick="sendCmd({cmd:'GET_STATUS'})">📊 Get Status</button>
+    </div>
+    <div class="log-panel" id="logPanel">
+      <div class="log-entry info">[System] BraiPay WebUSB Terminal initialized. Click "Connect USB" to connect.</div>
+    </div>
+    <div style="margin-top:14px;display:flex;gap:10px">
+      <input type="text" id="manualCmd" placeholder='Send raw JSON command (e.g. {"cmd":"PING"})' style="flex:1;padding:8px 14px;border-radius:8px;border:1px solid var(--border);background:var(--bg3);color:var(--text);font-size:12px;font-family:monospace" onkeydown="if(event.key==='Enter')sendManualCmd()">
+      <button class="btn btn-primary btn-sm" onclick="sendManualCmd()">Send</button>
+    </div>
+  </div>
+</div>
+
+<!-- Simple Mode Fullscreen Kiosk Overlay -->
+<div class="simple-container" id="simpleContainer">
+  <div class="simple-header">
+    <div>
+      <h2 style="font-size:22px;font-weight:900;background:linear-gradient(135deg,var(--purple),var(--cyan));-webkit-background-clip:text;-webkit-text-fill-color:transparent">⚡ BraiPay Express Kiosk</h2>
+      <span style="font-size:12px;color:var(--text3)">Fast Tap-to-Pay POS Mode</span>
+    </div>
+    <div style="display:flex;gap:12px;align-items:center">
+      <div class="currency-toggle">
+        <button class="active" id="simpleBtnRSD" onclick="setCurrency('RSD')">RSD</button>
+        <button id="simpleBtnEUR" onclick="setCurrency('EUR')">EUR</button>
+      </div>
+      <button class="btn btn-danger" onclick="toggleSimpleMode(false)">✕ Exit Simple Mode</button>
+    </div>
+  </div>
+
+  <div class="simple-body">
+    <!-- Left: Amount & Keypad -->
+    <div style="display:flex;flex-direction:column;gap:16px">
+      <div class="amount-display" style="padding:20px">
+        <div class="curr-label" id="simpleCurrLabel">Total Charge Amount</div>
+        <div class="amount" id="simpleAmountDisplay" style="font-size:56px">0.00</div>
+      </div>
+      <div class="simple-keypad">
+        <button class="simple-key" onclick="simpleAppendNum('1')">1</button>
+        <button class="simple-key" onclick="simpleAppendNum('2')">2</button>
+        <button class="simple-key" onclick="simpleAppendNum('3')">3</button>
+        <button class="simple-key" onclick="simpleAppendNum('4')">4</button>
+        <button class="simple-key" onclick="simpleAppendNum('5')">5</button>
+        <button class="simple-key" onclick="simpleAppendNum('6')">6</button>
+        <button class="simple-key" onclick="simpleAppendNum('7')">7</button>
+        <button class="simple-key" onclick="simpleAppendNum('8')">8</button>
+        <button class="simple-key" onclick="simpleAppendNum('9')">9</button>
+        <button class="simple-key" onclick="simpleAppendNum('.')">.</button>
+        <button class="simple-key" onclick="simpleAppendNum('0')">0</button>
+        <button class="simple-key" style="color:var(--red)" onclick="simpleClearNum()">⌫</button>
+      </div>
+      <button class="btn btn-success" style="padding:18px;font-size:20px;justify-content:center" onclick="simplePay()">💳 TAP TO PAY NOW</button>
+    </div>
+
+    <!-- Right: Quick Products & NFC animation -->
+    <div style="display:flex;flex-direction:column;gap:16px">
+      <div class="nfc-panel" style="padding:20px">
+        <h3 style="font-size:16px;font-weight:800">📡 Contactless Sensor</h3>
+        <div class="nfc-anim idle" id="simpleNfcAnim" style="width:100px;height:100px;font-size:48px">📱</div>
+        <div class="nfc-status-text" id="simpleNfcText" style="font-size:15px">Hold card or watch near phone back</div>
+      </div>
+
+      <h3 style="font-size:14px;font-weight:800">🍔 Quick Menu Items</h3>
+      <div class="simple-quick-products" id="simpleQuickGrid"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ================= STATE =================
+let usbDevice = null;
+let usbInterface = null;
+let isConnected = false;
+let isDemoMode = false;
+let isSimpleMode = false;
+let currentCurrency = 'RSD';
+let products = [];
+let cards = [];
+let transactions = [];
+let cart = new Map();
+let customAmount = 0;
+let simpleAmountStr = '0';
+let checkoutState = 'Idle';
+let pollInterval = null;
+let terminalRecipientCardId = -1;
+let connectedBankCardId = -1;
+const EUR_RATE = 117.0;
+
+const AOA_VENDOR_ID = 0x18D1;
+const AOA_PRODUCT_IDS = [0x2D00, 0x2D01, 0x2D04, 0x2D05];
+const AOA_GET_PROTOCOL = 51;
+const AOA_SEND_STRING = 52;
+const AOA_START = 53;
+const AOA_STRINGS = [
+  'BraiPay',
+  'WebUSB Terminal',
+  'BraiPay POS bridge over USB',
+  '1.0',
+  'https://braipay.local',
+  'braipay-webusb-0001',
+];
+
+const PHONE_FILTERS = [
+  { vendorId: 0x18D1 }, { vendorId: 0x04E8 }, { vendorId: 0x2717 },
+  { vendorId: 0x22B8 }, { vendorId: 0x0BB4 }, { vendorId: 0x12D1 },
+  { vendorId: 0x1004 }, { vendorId: 0x0FCE }, { vendorId: 0x2A70 }
+];
+
+let aoaPending = false;
+let readLoopActive = false;
+
+function isAccessoryMode(dev) {
+  return dev.vendorId === AOA_VENDOR_ID && AOA_PRODUCT_IDS.includes(dev.productId);
+}
+
+function setConnectButton(mode) {
+  const btnUsb = document.getElementById('btnConnect');
+  const btnBle = document.getElementById('btnConnectBle');
+  if (mode === 'connected') { 
+      if (usbDevice) {
+          btnUsb.textContent = '⏏️ Disconnect USB'; btnUsb.className = 'btn btn-danger';
+          if(btnBle) btnBle.style.display = 'none';
+      }
+      if (bleDevice) {
+          if(btnBle) { btnBle.textContent = '⏏️ Disconnect Bluetooth'; btnBle.className = 'btn btn-danger'; }
+          btnUsb.style.display = 'none';
+      }
+  }
+  else if (mode === 'step2') { btnUsb.textContent = '🔗 Step 2: Attach Phone'; btnUsb.className = 'btn btn-success'; }
+  else if (mode === 'connecting') { 
+      if(btnBle) { btnBle.textContent = '⏳ Connecting...'; btnBle.className = 'btn btn-outline'; }
+  }
+  else { 
+      btnUsb.textContent = '🔌 Connect USB'; btnUsb.className = 'btn btn-primary'; btnUsb.style.display = 'inline-flex';
+      if(btnBle) { btnBle.textContent = '📶 Connect Bluetooth'; btnBle.className = 'btn btn-primary'; btnBle.style.display = 'inline-flex'; }
+  }
+}
+
+async function connectUSB() {
+  if (isConnected) { disconnectUSB(); return; }
+  if (aoaPending) { await finishAoaConnect(); return; }
+  await beginUsbConnect();
+}
+
+async function beginUsbConnect() {
+  isDemoMode = false;
+  if (!navigator.usb) {
+    addLog('err', 'WebUSB is not supported in this browser. Use Chrome/Edge.');
+    addLog('info', 'Tip: Loading Demo Mode instead...');
+    loadDemoData();
+    return;
+  }
+
+  let dev;
+  try {
+    addLog('info', 'Requesting USB device access — select your Android phone...');
+    dev = await navigator.usb.requestDevice({
+      filters: AOA_PRODUCT_IDS.map(pid => ({ vendorId: AOA_VENDOR_ID, productId: pid })).concat(PHONE_FILTERS)
+    });
+  } catch (err) {
+    if (err.name === 'NotFoundError') { addLog('info', 'No device selected.'); return; }
+    addLog('err', 'Device selection failed: ' + err.message);
+    return;
+  }
+
+  addLog('info', `Device selected: ${dev.productName || 'Android Device'} (${hexId(dev.vendorId)}:${hexId(dev.productId)})`);
+
+  try {
+    if (isAccessoryMode(dev)) {
+      addLog('resp', 'Phone is in accessory mode — opening data pipes.');
+      await openAccessoryLink(dev);
+    } else {
+      await runAoaHandshake(dev);
+    }
+  } catch (err) {
+    addLog('err', 'USB connection failed: ' + err.message);
+    try { await dev.close(); } catch (e) {}
+  }
+}
+
+async function runAoaHandshake(dev) {
+  await dev.open();
+  addLog('info', 'USB opened — starting Android Open Accessory handshake...');
+
+  const proto = await dev.controlTransferIn(
+    { requestType: 'vendor', recipient: 'device', request: AOA_GET_PROTOCOL, value: 0, index: 0 }, 2);
+
+  if (proto.status !== 'ok' || !proto.data || proto.data.byteLength < 2) {
+    throw new Error('Phone did not answer protocol query. Unlock screen and retry.');
+  }
+
+  const enc = new TextEncoder();
+  for (let i = 0; i < AOA_STRINGS.length; i++) {
+    await dev.controlTransferOut(
+      { requestType: 'vendor', recipient: 'device', request: AOA_SEND_STRING, value: 0, index: i },
+      enc.encode(AOA_STRINGS[i] + '\0'));
+  }
+
+  await dev.controlTransferOut(
+    { requestType: 'vendor', recipient: 'device', request: AOA_START, value: 0, index: 0 });
+  addLog('resp', 'Accessory start command sent — phone re-connecting.');
+
+  try { await dev.close(); } catch (e) {}
+
+  aoaPending = true;
+  setConnectButton('step2');
+  addLog('info', '📱 Allow "Open BraiPay" on the phone.');
+  addLog('info', '👉 Press "Step 2: Attach Phone" and pick the device again.');
+}
+
+async function finishAoaConnect() {
+  try {
+    let dev = (await navigator.usb.getDevices()).find(isAccessoryMode);
+    if (!dev) {
+      dev = await navigator.usb.requestDevice({
+        filters: AOA_PRODUCT_IDS.map(pid => ({ vendorId: AOA_VENDOR_ID, productId: pid }))
+      });
+    }
+    aoaPending = false;
+    await openAccessoryLink(dev);
+  } catch (err) {
+    addLog('err', 'Attach failed: ' + err.message);
+    aoaPending = true;
+    setConnectButton('step2');
+  }
+}
+
+async function openAccessoryLink(dev) {
+  await dev.open();
+  if (!dev.configuration) await dev.selectConfiguration(1);
+
+  let claimed = null;
+  for (const iface of dev.configuration.interfaces) {
+    for (const alt of iface.alternates) {
+      const epIn = alt.endpoints.find(e => e.direction === 'in' && e.type === 'bulk');
+      const epOut = alt.endpoints.find(e => e.direction === 'out' && e.type === 'bulk');
+      if (epIn && epOut) {
+        await dev.claimInterface(iface.interfaceNumber);
+        claimed = { iface: iface.interfaceNumber, epIn: epIn.endpointNumber, epOut: epOut.endpointNumber };
+        break;
+      }
+    }
+    if (claimed) break;
+  }
+
+  if (!claimed) {
+    try { await dev.close(); } catch (e) {}
+    throw new Error('No bulk endpoints found.');
+  }
+
+  usbDevice = dev;
+  usbInterface = claimed;
+  addLog('resp', `Claimed interface ${claimed.iface}`);
+
+  setConnected(true, 'WebUSB (Accessory)');
+  startReadLoop();
+  startPolling();
+
+  await sendCmd({ cmd: 'GET_STATUS' });
+  await sendCmd({ cmd: 'GET_PRODUCTS' });
+  await sendCmd({ cmd: 'GET_CARDS' });
+  await sendCmd({ cmd: 'GET_TRANSACTIONS', limit: 50 });
+}
+
+function hexId(n) { return '0x' + n.toString(16).toUpperCase().padStart(4, '0'); }
+
+function disconnectUSB() {
+  stopPolling();
+  readLoopActive = false;
+  aoaPending = false;
+  if (usbDevice) {
+    try { usbDevice.close(); } catch (e) {}
+    usbDevice = null;
+    usbInterface = null;
+  }
+  if (bleDevice) {
+    try { bleDevice.gatt.disconnect(); } catch(e) {}
+    bleDevice = null;
+    bleTxChar = null;
+    bleRxChar = null;
+  }
+  isDemoMode = false;
+  setConnected(false);
+  setConnectButton('idle');
+  addLog('info', 'Device disconnected');
+}
+
+// BLE (Bluetooth)
+let bleDevice = null;
+let bleTxChar = null;
+let bleRxChar = null;
+let bleRxBuffer = '';
+
+async function connectBLE() {
+  if (usbDevice || bleDevice) return;
+  setConnectButton('connecting');
+  addLog('info', 'Requesting Bluetooth device...');
+  try {
+    bleDevice = await navigator.bluetooth.requestDevice({
+      filters: [{ services: ['0000ffe0-0000-1000-8000-00805f9b34fb'] }]
+    });
+    addLog('info', `Connecting to GATT server...`);
+    bleDevice.addEventListener('gattserverdisconnected', disconnectUSB);
+    const server = await bleDevice.gatt.connect();
+    
+    addLog('info', `Getting primary service...`);
+    const service = await server.getPrimaryService('0000ffe0-0000-1000-8000-00805f9b34fb');
+    
+    bleTxChar = await service.getCharacteristic('0000ffe1-0000-1000-8000-00805f9b34fb'); // App sends to Web
+    bleRxChar = await service.getCharacteristic('0000ffe2-0000-1000-8000-00805f9b34fb'); // Web sends to App
+    
+    await bleTxChar.startNotifications();
+    bleTxChar.addEventListener('characteristicvaluechanged', handleBleData);
+    
+    setConnected(true, 'Bluetooth (BLE)');
+    startPolling();
+    
+    await sendCmd({ cmd: 'GET_STATUS' });
+    await sendCmd({ cmd: 'GET_PRODUCTS' });
+    await sendCmd({ cmd: 'GET_CARDS' });
+    await sendCmd({ cmd: 'GET_TRANSACTIONS', limit: 50 });
+  } catch (err) {
+    addLog('err', `BLE Error: ${err.message}`);
+    setConnectButton('idle');
+    if (bleDevice && bleDevice.gatt.connected) {
+      bleDevice.gatt.disconnect();
+    }
+    bleDevice = null;
+  }
+}
+
+function handleBleData(event) {
+  const value = event.target.value;
+  const decoder = new TextDecoder('utf-8');
+  bleRxBuffer += decoder.decode(value);
+  
+  let lines = bleRxBuffer.split('\n');
+  bleRxBuffer = lines.pop(); // Keep incomplete line in buffer
+  
+  for (const line of lines) {
+    if (line.trim()) {
+      handleUsbMessage(line);
+    }
+  }
+}
+
+async function startReadLoop() {
+  if (readLoopActive) return;
+  readLoopActive = true;
+  const decoder = new TextDecoder();
+  let buffer = '';
+
+  while (readLoopActive && usbDevice && usbInterface) {
+    let result;
+    try {
+      result = await usbDevice.transferIn(usbInterface.epIn, 16384);
+    } catch (err) {
+      if (readLoopActive) { addLog('err', 'USB read stopped: ' + err.message); disconnectUSB(); }
+      return;
+    }
+
+    if (!result.data || result.data.byteLength === 0) continue;
+    buffer += decoder.decode(result.data, { stream: true });
+    const lines = buffer.split('\n');
+    buffer = lines.pop();
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed) continue;
+      addLog('resp', '← ' + trimmed);
+      try { handleResponse(JSON.parse(trimmed)); } catch (e) {}
+    }
+  }
+}
+
+let reqSeq = 0;
+const pendingRequests = new Map();
+
+function sendCmdAwait(cmdObj, timeoutMs = 10000) {
+  const reqId = 'r' + (++reqSeq);
+  return new Promise(resolve => {
+    const timer = setTimeout(() => {
+      pendingRequests.delete(reqId);
+      resolve({ type: 'ERROR', message: 'Timeout waiting for phone response' });
+    }, timeoutMs);
+    pendingRequests.set(reqId, { resolve, timer });
+    sendCmd(Object.assign({}, cmdObj, { reqId }));
+  });
+}
+
+function resolvePending(resp) {
+  if (!resp.reqId) return;
+  const pending = pendingRequests.get(resp.reqId);
+  if (!pending) return;
+  clearTimeout(pending.timer);
+  pendingRequests.delete(resp.reqId);
+  pending.resolve(resp);
+}
+
+async function sendCmd(cmdObj) {
+  if (isDemoMode) { handleDemoCommand(cmdObj); return; }
+  
+  const json = JSON.stringify(cmdObj) + '\n';
+  const encoded = new TextEncoder().encode(json);
+  
+  if (bleDevice && bleRxChar) {
+    addLog('cmd', '→ (BLE) ' + json.trim());
+    try {
+        await bleRxChar.writeValueWithoutResponse(encoded);
+    } catch (err) {
+        addLog('err', `BLE Transfer error: ${err.message}`);
+    }
+    return;
+  }
+  
+  if (!usbDevice || !usbInterface) {
+    addLog('err', 'No USB or BLE device connected');
+    return;
+  }
+
+  addLog('cmd', '→ (USB) ' + json.trim());
+  try {
+    await usbDevice.transferOut(usbInterface.epOut, encoded);
+  } catch (err) {
+    addLog('err', `Transfer error: ${err.message}`);
+  }
+}
+
+function startPolling() {
+  stopPolling();
+  pollInterval = setInterval(() => {
+    if (isConnected && !isDemoMode) sendCmd({ cmd: 'GET_STATUS' });
+  }, 5000);
+}
+
+function stopPolling() {
+  if (pollInterval) { clearInterval(pollInterval); pollInterval = null; }
+}
+
+// ================= RESPONSE HANDLER =================
+function handleResponse(resp) {
+  resolvePending(resp);
+  switch(resp.type) {
+    case 'PRODUCTS':
+      products = resp.data || [];
+      renderProducts();
+      renderSimpleQuickProducts();
+      updateStats();
+      break;
+    case 'CARDS':
+      cards = resp.data || [];
+      renderCards();
+      renderBankInfo();
+      updateStats();
+      break;
+    case 'TRANSACTIONS':
+      transactions = resp.data || [];
+      renderHistory();
+      updateStats();
+      break;
+    case 'STATUS':
+      if (resp.currency) { currentCurrency = resp.currency; updateCurrencyUI(); }
+      if (resp.businessName) document.getElementById('infoBusiness').textContent = resp.businessName;
+      if (resp.checkoutState) { checkoutState = resp.checkoutState; document.getElementById('infoCheckout').textContent = checkoutState; updateNfcPanel(); }
+      if (resp.isBankModeEnabled !== undefined) {
+        document.getElementById('infoBankStatus').textContent = resp.isBankModeEnabled ? 'Active' : 'Disabled';
+      }
+      if (resp.selectedBankName) document.getElementById('bankNameDisplay').textContent = resp.selectedBankName;
+      if (resp.bankIban) document.getElementById('bankIbanDisplay').textContent = 'IBAN: ' + resp.bankIban;
+      if (resp.connectedBankCardId) { connectedBankCardId = resp.connectedBankCardId; renderBankInfo(); }
+      if (resp.terminalRecipientCardId !== undefined) {
+        terminalRecipientCardId = resp.terminalRecipientCardId;
+        const sel = document.getElementById('termRecipientSelect');
+        if (sel) sel.value = String(terminalRecipientCardId);
+      }
+      if (resp.total !== undefined) updateTerminalAmount(resp.total);
+      break;
+    case 'CHECKOUT_UPDATE':
+      checkoutState = resp.state;
+      document.getElementById('infoCheckout').textContent = checkoutState;
+      updateNfcPanel();
+      if (resp.state === 'Success') {
+        showTxResult(true, resp.details);
+        sendCmd({cmd: 'GET_CARDS'});
+        sendCmd({cmd: 'GET_TRANSACTIONS'});
+      }
+      if (resp.state === 'Error') showTxResult(false, resp.details);
+      break;
+    case 'NFC_TAP':
+      document.getElementById('infoNfc').textContent = resp.uid + ' @ ' + new Date().toLocaleTimeString();
+      addLog('info', `📡 NFC Tap detected: ${resp.uid}`);
+      break;
+    case 'CARD_TAPPED':
+      addLog('info', `💳 Card tapped: ${resp.cardHolder} (${resp.provider})`);
+      break;
+    case 'PONG':
+      addLog('resp', `🏓 Pong! Latency: ${Date.now() - (resp.timestamp || Date.now())}ms`);
+      break;
+    case 'TRANSFER_RESULT':
+      addLog(resp.success ? 'resp' : 'err', `${resp.success ? '💸' : '❌'} ${resp.message}`);
+      break;
+    case 'OK':
+      addLog('resp', `✅ ${resp.message}`);
+      break;
+    case 'ERROR':
+      addLog('err', `❌ ${resp.message}`);
+      break;
+  }
+}
+
+// ================= DEMO MODE =================
+function loadDemoData() {
+  isDemoMode = true;
+  setConnected(true, 'Demo');
+  
+  products = [
+    {id:1,name:'Big Mac Meal',price:820,category:'Meals'},{id:2,name:'McChicken Meal',price:720,category:'Meals'},
+    {id:3,name:'Quarter Pounder Meal',price:880,category:'Meals'},{id:4,name:'Filet-O-Fish Meal',price:760,category:'Meals'},
+    {id:5,name:'6pc McNuggets',price:490,category:'Snacks'},{id:6,name:'10pc McNuggets',price:690,category:'Snacks'},
+    {id:7,name:'McFlurry Oreo',price:330,category:'Desserts'},{id:8,name:'McFlurry KitKat',price:350,category:'Desserts'},
+    {id:9,name:'Coca-Cola Large',price:220,category:'Drinks'},{id:10,name:'Fanta Large',price:220,category:'Drinks'},
+    {id:11,name:'Coffee Latte',price:280,category:'Drinks'},{id:12,name:'Apple Pie',price:180,category:'Desserts'},
+    {id:13,name:'Cheeseburger',price:290,category:'Burgers'},{id:14,name:'McDouble',price:390,category:'Burgers'},
+    {id:15,name:'Big Tasty',price:950,category:'Burgers'},{id:16,name:'Happy Meal',price:620,category:'Meals'},
+    {id:17,name:'Large Fries',price:280,category:'Sides'},{id:18,name:'Chicken Wings 6pc',price:520,category:'Snacks'},
+    {id:19,name:'McSundae Caramel',price:210,category:'Desserts'},
+  ];
+
+  cards = [
+    {id:1,cardHolder:'BRANKO POPOVIC',cardNumber:'4120 8547 3621 9054',cardUid:'04:A2:8B:1F',balance:245780,currency:'RSD',colorHex:'#6200EE',isKidCard:false,bankProvider:'Banca Intesa',cardStyle:'Gold Edition',expiryDate:'08/28',cvv:'342',creditDebt:5000,creditLimit:500000},
+    {id:2,cardHolder:'BRANKO POPOVIC',cardNumber:'9880 4421 7765 3390',cardUid:'WATCH:SHEALTH:OOB',balance:182500,currency:'RSD',colorHex:'#D4AF37',isKidCard:false,bankProvider:'DinaCard',cardStyle:'Serbian Pride',expiryDate:'12/27',cvv:'891',creditDebt:0,creditLimit:0},
+    {id:3,cardHolder:'MILAN JOVANOVIC',cardNumber:'5120 6633 9912 0045',cardUid:'04:B3:C4:D5',balance:890.50,currency:'EUR',colorHex:'#FF0266',isKidCard:false,bankProvider:'Raiffeisen Bank',cardStyle:'Premium',expiryDate:'03/29',cvv:'556',creditDebt:0,creditLimit:2000},
+    {id:4,cardHolder:'ANA PETROVIC',cardNumber:'9880 1122 3344 5566',cardUid:'',balance:15200,currency:'RSD',colorHex:'#4CAF50',isKidCard:true,parentCardId:1,bankProvider:'OTP Bank',cardStyle:'Kids Card',expiryDate:'06/28',cvv:'123',creditDebt:0,creditLimit:0,dailySpendingLimit:3000},
+  ];
+
+  transactions = [
+    {id:1,productName:'Big Mac Meal',amount:820,status:'COMPLETED',paymentMethod:'Physical NFC Tap',transactionId:'TX-BM-001',currency:'RSD',timestamp:Date.now()-3600000},
+    {id:2,productName:'McFlurry Oreo + Coca-Cola',amount:550,status:'COMPLETED',paymentMethod:'Game Wallet (Visa)',transactionId:'TX-MF-002',currency:'RSD',timestamp:Date.now()-7200000},
+    {id:3,productName:'Quarter Pounder Meal',amount:880,status:'COMPLETED',paymentMethod:'Physical NFC Tap',transactionId:'TX-QP-003',currency:'RSD',timestamp:Date.now()-10800000},
+  ];
+
+  connectedBankCardId = 1;
+  renderProducts();
+  renderCards();
+  renderHistory();
+  renderBankInfo();
+  renderSimpleQuickProducts();
+  updateStats();
+  addLog('info', '🎮 Demo mode loaded');
+}
+
+function handleDemoCommand(cmd) {
+  addLog('cmd', `→ [Demo] ${JSON.stringify(cmd)}`);
+  const rid = cmd.reqId;
+  const reply = (obj) => handleResponse(Object.assign({}, obj, rid ? { reqId: rid } : {}));
+  switch(cmd.cmd) {
+    case 'GET_PRODUCTS': handleResponse({type:'PRODUCTS',data:products}); break;
+    case 'GET_CARDS': handleResponse({type:'CARDS',data:cards}); break;
+    case 'GET_TRANSACTIONS': handleResponse({type:'TRANSACTIONS',data:transactions}); break;
+    case 'PING': handleResponse({type:'PONG',timestamp:Date.now()}); break;
+    case 'GET_STATUS':
+      handleResponse({type:'STATUS',connected:true,currency:currentCurrency,total:getCartTotal(),checkoutState:checkoutState,businessName:'BraiPay Demo Store',isBankModeEnabled:true,connectedBankCardId:1,selectedBankName:'Raiffeisen Bank',bankIban:'RS35-2650-0000-1234',terminalRecipientCardId:terminalRecipientCardId});
+      break;
+    case 'PAY':
+      checkoutState = 'Processing';
+      updateNfcPanel();
+      addLog('info', `💳 Payment of ${cmd.amount} ${cmd.currency} initiated at terminal`);
+      setTimeout(() => {
+        checkoutState = 'Loading';
+        updateNfcPanel();
+        handleResponse({type:'NFC_TAP',uid:'04:A2:8B:1F'});
+        setTimeout(() => {
+          const tx = {id:transactions.length+1,productName:cmd.productName||'Payment',amount:cmd.amount,status:'COMPLETED',paymentMethod:'Physical NFC Tap (Demo)',transactionId:'TX-DEMO-'+Date.now().toString(36).toUpperCase(),currency:cmd.currency||currentCurrency,timestamp:Date.now()};
+          transactions.unshift(tx);
+          checkoutState = 'Idle';
+          showTxResult(true, tx);
+          renderHistory();
+          updateStats();
+          updateNfcPanel();
+          if (cards[0]) { cards[0].balance -= cmd.amount; renderCards(); renderBankInfo(); }
+        }, 2000);
+      }, 2500);
+      break;
+    case 'SIMULATE_NFC_TAP':
+      handleResponse({type:'NFC_TAP',uid:cmd.uid});
+      if (checkoutState === 'Processing') {
+        checkoutState = 'Loading';
+        updateNfcPanel();
+        setTimeout(() => {
+          checkoutState = 'Idle';
+          showTxResult(true, {productName:'NFC Payment',amount:getCartTotal()||820,currency:currentCurrency,transactionId:'TX-NFC-'+Date.now().toString(36).toUpperCase()});
+          updateNfcPanel();
+        }, 1500);
+      }
+      reply({type:'OK',message:`NFC Tag tapped: ${cmd.uid}`});
+      break;
+    case 'SET_TERMINAL_RECIPIENT':
+      terminalRecipientCardId = cmd.cardId;
+      reply({type:'OK',message:`Terminal recipient set to ${cmd.cardId}`});
+      break;
+    case 'TAKE_LOAN': {
+      const card = cards.find(c => c.id === cmd.cardId);
+      if (card) {
+        card.balance += cmd.amount;
+        card.creditDebt += cmd.amount;
+        renderCards(); renderBankInfo();
+        reply({type:'OK',message:`Loan of ${cmd.amount} deposited to ${card.cardHolder}`});
+      }
+      break;
+    }
+    case 'REPAY_LOAN': {
+      const card = cards.find(c => c.id === cmd.cardId);
+      if (card) {
+        const actual = Math.min(cmd.amount, card.creditDebt, card.balance);
+        card.balance -= actual;
+        card.creditDebt -= actual;
+        renderCards(); renderBankInfo();
+        reply({type:'OK',message:`Repaid ${actual} debt for ${card.cardHolder}`});
+      }
+      break;
+    }
+    case 'TRANSFER': {
+      const from = cards.find(c => c.id === cmd.sourceCardId);
+      const to = cards.find(c => c.id === cmd.targetCardId);
+      if (!from || !to) { reply({type:'TRANSFER_RESULT',success:false,message:'Card account not found.'}); break; }
+      if (from.balance < cmd.amount) {
+        reply({type:'TRANSFER_RESULT',success:false,message:`Insufficient balance! Need ${cmd.amount.toFixed(2)} ${from.currency}.`});
+        break;
+      }
+      const received = from.currency === to.currency ? cmd.amount
+        : (from.currency === 'RSD' ? cmd.amount / EUR_RATE : cmd.amount * EUR_RATE);
+      from.balance -= cmd.amount;
+      to.balance += received;
+      transactions.unshift({
+        id: transactions.length + 1,
+        productName: `Transfer to ${to.cardHolder}`,
+        amount: cmd.amount, status: 'COMPLETED', paymentMethod: 'Card Transfer (Demo)',
+        transactionId: 'TX-TRF-' + Date.now().toString(36).toUpperCase(),
+        currency: from.currency, timestamp: Date.now()
+      });
+      renderCards(); renderHistory(); updateStats();
+      reply({type:'TRANSFER_RESULT',success:true,message:`Sent ${cmd.amount.toFixed(2)} ${from.currency} to ${to.cardHolder}.`});
+      break;
+    }
+    case 'ADD_CARD':
+      cards.push({
+        id: Math.max(0, ...cards.map(c => c.id)) + 1,
+        cardHolder: cmd.cardHolder, cardNumber: cmd.cardNumber, cardUid: cmd.cardUid || '',
+        balance: cmd.balance || 0, currency: cmd.currency || 'RSD', colorHex: cmd.colorHex || '#6200EE',
+        isKidCard: false, bankProvider: cmd.cardNumber.replace(/\s/g,'').startsWith('9880') ? 'DinaCard' : 'Visa',
+        cardStyle: 'Gold Edition', expiryDate: '08/28', creditDebt: 0, creditLimit: 0
+      });
+      renderCards(); updateStats();
+      reply({type:'OK', message:`Card for ${cmd.cardHolder} created`});
+      break;
+    case 'ADD_PRODUCT':
+      products.push({
+        id: Math.max(0, ...products.map(p => p.id)) + 1,
+        name: cmd.name, price: cmd.price, category: cmd.category || 'General'
+      });
+      renderProducts(); updateStats();
+      reply({type:'OK', message:`Product ${cmd.name} added`});
+      break;
+  }
+}
+
+// ================= UI RENDERING =================
+function switchTab(tab) {
+  document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  const target = document.getElementById('tab-' + tab);
+  if (target) target.classList.add('active');
+  
+  document.querySelectorAll('.nav-item').forEach(n => {
+    if (n.getAttribute('onclick')?.includes(tab)) n.classList.add('active');
+  });
+
+  const titles = {
+    dashboard:'📊 Dashboard',
+    terminal:'🏪 Terminal POS & NFC',
+    bank:'🏦 Bank Mode & Accounts',
+    products:'🛒 Product Catalog',
+    cards:'💳 Payment Cards',
+    send:'💸 Send Money to Player',
+    history:'📋 Transaction History',
+    log:'🔌 USB Communication Log'
+  };
+  document.getElementById('tabTitle').textContent = titles[tab] || tab;
+}
+
+function toggleSimpleMode(enable) {
+  isSimpleMode = enable;
+  const container = document.getElementById('simpleContainer');
+  container.className = 'simple-container' + (enable ? ' active' : '');
+  if (enable) {
+    simpleAmountStr = '0';
+    updateSimpleAmountDisplay();
+    renderSimpleQuickProducts();
+    sendCmd({ cmd: 'SET_SIMPLE_MODE', enabled: true });
+  } else {
+    sendCmd({ cmd: 'SET_SIMPLE_MODE', enabled: false });
+  }
+}
+
+function setConnected(connected, mode) {
+  isConnected = connected;
+  const dot = document.getElementById('connDot');
+  const text = document.getElementById('connText');
+  const btn = document.getElementById('btnConnect');
+  const infoMode = document.getElementById('infoMode');
+
+  if (connected) {
+    dot.className = 'conn-dot ' + (isDemoMode ? 'demo' : 'connected');
+    text.textContent = isDemoMode ? 'Demo Mode' : 'Connected';
+    setConnectButton('connected');
+    infoMode.textContent = mode || 'WebUSB';
+    if (usbDevice) document.getElementById('infoDevice').textContent = usbDevice.productName || `VID:0x${usbDevice.vendorId.toString(16)}`;
+    else if (isDemoMode) document.getElementById('infoDevice').textContent = '🎮 Demo Device';
+  } else {
+    dot.className = 'conn-dot disconnected';
+    text.textContent = 'Disconnected';
+    setConnectButton(aoaPending ? 'step2' : 'idle');
+    infoMode.textContent = 'Disconnected';
+    document.getElementById('infoDevice').textContent = '—';
+  }
+}
+
+function setCurrency(curr) {
+  currentCurrency = curr;
+  updateCurrencyUI();
+  sendCmd({cmd:'SET_CURRENCY', currency:curr});
+}
+
+function updateCurrencyUI() {
+  document.getElementById('btnRSD').className = currentCurrency === 'RSD' ? 'active' : '';
+  document.getElementById('btnEUR').className = currentCurrency === 'EUR' ? 'active' : '';
+  document.getElementById('simpleBtnRSD').className = currentCurrency === 'RSD' ? 'active' : '';
+  document.getElementById('simpleBtnEUR').className = currentCurrency === 'EUR' ? 'active' : '';
+  document.getElementById('infoCurrency').textContent = currentCurrency;
+  document.getElementById('termCurrLabel').textContent = 'Amount in ' + currentCurrency;
+  document.getElementById('simpleCurrLabel').textContent = 'Total Charge Amount (' + currentCurrency + ')';
+  renderProducts();
+  renderCart();
+  renderSimpleQuickProducts();
+}
+
+function updateStats() {
+  document.getElementById('statProducts').textContent = products.length;
+  document.getElementById('statCards').textContent = cards.length;
+  const completed = transactions.filter(t => t.status === 'COMPLETED');
+  document.getElementById('statTx').textContent = completed.length;
+  const revenue = completed.reduce((s,t) => s + (t.currency === currentCurrency ? t.amount : (currentCurrency === 'RSD' ? t.amount * EUR_RATE : t.amount / EUR_RATE)), 0);
+  document.getElementById('statRevenue').textContent = formatAmount(revenue);
+  document.getElementById('statRevenueCurr').textContent = currentCurrency;
+}
+
+function formatAmount(val) {
+  if (currentCurrency === 'EUR') return val.toFixed(2);
+  return Math.round(val).toLocaleString();
+}
+
+function getProductEmoji(cat) {
+  const map = {Meals:'🍔',Burgers:'🍔',Snacks:'🍗',Desserts:'🍦',Drinks:'🥤',Sides:'🍟',General:'📦'};
+  return map[cat] || '📦';
+}
+
+// Products
+function renderProducts() {
+  const grid = document.getElementById('productGrid');
+  const cats = [...new Set(products.map(p => p.category))];
+  const sel = document.getElementById('categoryFilter');
+  sel.innerHTML = '<option value="">All Categories</option>' + cats.map(c => `<option value="${c}">${c}</option>`).join('');
+  
+  const search = document.getElementById('productSearch').value.toLowerCase();
+  const catFilter = document.getElementById('categoryFilter').value;
+  
+  const filtered = products.filter(p => {
+    if (search && !p.name.toLowerCase().includes(search)) return false;
+    if (catFilter && p.category !== catFilter) return false;
+    return true;
+  });
+
+  grid.innerHTML = filtered.map(p => {
+    const price = currentCurrency === 'EUR' ? (p.price / EUR_RATE) : p.price;
+    return `<div class="product-card">
+      <div class="emoji">${getProductEmoji(p.category)}</div>
+      <div class="name">${p.name}</div>
+      <div class="price">${currentCurrency === 'EUR' ? '€' : ''}${formatAmount(price)} ${currentCurrency === 'EUR' ? '' : 'RSD'}</div>
+      <div class="cat">${p.category}</div>
+      <button class="add-btn" onclick="addToCart(${p.id})">+ Add to Cart</button>
+    </div>`;
+  }).join('');
+  
+  document.getElementById('productCount').textContent = `${filtered.length} items`;
+  const dl = document.getElementById('categoryOptions');
+  if (dl) dl.innerHTML = cats.map(c => `<option value="${c}">`).join('');
+}
+
+function filterProducts() { renderProducts(); }
+
+// Cards
+function renderCards() {
+  const row = document.getElementById('cardsRow');
+  row.innerHTML = cards.map(c => {
+    const balance = c.currency === 'EUR' ? `€${c.balance.toFixed(2)}` : `${Math.round(c.balance).toLocaleString()} RSD`;
+    const isDina = c.bankProvider?.includes('Dina') || c.cardNumber?.startsWith('9880');
+    const chipLabel = c.cardUid?.includes('WATCH') ? '⌚ Watch' : (c.cardUid ? `📡 ${c.cardUid}` : '—');
+    return `<div class="bank-card" style="background:linear-gradient(135deg,${c.colorHex || '#6200EE'},${adjustColor(c.colorHex||'#6200EE',.3)})">
+      <div class="card-chip">💳</div>
+      <div class="card-number">${c.cardNumber || '•••• •••• •••• ••••'}</div>
+      <div class="card-balance">${balance}</div>
+      <div class="card-nfc">${chipLabel}</div>
+      <div class="card-bottom">
+        <div><div class="card-holder">${c.cardHolder}</div><div class="card-expiry">${c.expiryDate || '08/28'}</div></div>
+        <div class="card-provider">${isDina ? '🇷🇸 DinaCard' : (c.bankProvider || 'Visa')}</div>
+      </div>
+      <div class="card-actions" style="margin-top:10px; display:flex; gap:10px; justify-content:center;">
+          <button class="btn btn-sm" style="background:rgba(255,255,255,0.2); color:#fff; border:none; padding:4px 8px; border-radius:4px; cursor:pointer;" onclick="promptMoneyUpdate(${c.id}, 'ADD')">➕ Add</button>
+          <button class="btn btn-sm" style="background:rgba(255,0,0,0.4); color:#fff; border:none; padding:4px 8px; border-radius:4px; cursor:pointer;" onclick="promptMoneyUpdate(${c.id}, 'REVOKE')">➖ Revoke</button>
+      </div>
+    </div>`;
+  }).join('');
+
+  // Details table
+  const tbody = document.getElementById('cardDetailsBody');
+  tbody.innerHTML = cards.map(c => {
+    const balance = c.currency === 'EUR' ? `€${c.balance.toFixed(2)}` : `${Math.round(c.balance).toLocaleString()} RSD`;
+    const chipLabel = c.cardUid?.includes('WATCH') ? '⌚ Watch SHealth' : (c.cardUid || '—');
+    return `<tr>
+      <td><strong>${c.cardHolder}</strong></td>
+      <td style="font-family:monospace;letter-spacing:1px">${c.cardNumber}</td>
+      <td>${c.bankProvider || '—'}</td>
+      <td style="font-weight:700;color:var(--green)">${balance}</td>
+      <td><span class="badge ${c.currency==='RSD'?'badge-orange':'badge-blue'}">${c.currency}</span></td>
+      <td style="font-family:monospace;font-size:10px">${chipLabel}</td>
+      <td>${c.isKidCard ? '<span class="badge badge-purple">Kid</span>' : '<span class="badge badge-green">Main</span>'}</td>
+    </tr>`;
+  }).join('');
+
+  document.getElementById('cardCount').textContent = `${cards.length} cards`;
+  renderSendCardOptions();
+  renderTerminalRecipientOptions();
+  renderBankCardSelects();
+
+  // Quick pay cards in terminal
+  const qp = document.getElementById('quickPayCards');
+  qp.innerHTML = cards.map(c => {
+    const bal = c.currency === 'EUR' ? `€${c.balance.toFixed(2)}` : `${Math.round(c.balance).toLocaleString()} RSD`;
+    return `<button class="btn btn-outline btn-sm" onclick="chargeCardDirectly(${c.id})" style="justify-content:space-between;width:100%">
+      <span>💳 ${c.cardHolder.split(' ')[0]} (*${(c.cardNumber||'').replace(/\s/g,'').slice(-4)})</span>
+      <span style="color:var(--green);font-weight:800">${bal}</span>
+    </button>`;
+  }).join('');
+}
+
+function adjustColor(hex, factor) {
+  let r = parseInt(hex.slice(1,3),16), g = parseInt(hex.slice(3,5),16), b = parseInt(hex.slice(5,7),16);
+  r = Math.min(255, Math.round(r * (1 + factor)));
+  g = Math.min(255, Math.round(g * (1 + factor)));
+  b = Math.min(255, Math.round(b * (1 + factor)));
+  return `#${r.toString(16).padStart(2,'0')}${g.toString(16).padStart(2,'0')}${b.toString(16).padStart(2,'0')}`;
+}
+
+// Cart
+function addToCart(productId) {
+  const p = products.find(x => x.id === productId);
+  if (!p) return;
+  const existing = cart.get(productId);
+  if (existing) existing.qty++;
+  else cart.set(productId, {product: p, qty: 1});
+  renderCart();
+  addLog('info', `🛒 Added "${p.name}" to cart`);
+}
+
+function removeFromCart(productId) {
+  const existing = cart.get(productId);
+  if (existing) {
+    existing.qty--;
+    if (existing.qty <= 0) cart.delete(productId);
+  }
+  renderCart();
+}
+
+function clearCart() {
+  cart.clear();
+  customAmount = 0;
+  document.getElementById('customAmountInput').value = '';
+  renderCart();
+  sendCmd({cmd:'CLEAR_CART'});
+}
+
+function getCartTotal() {
+  let total = customAmount;
+  for (const [_, item] of cart) {
+    const price = currentCurrency === 'EUR' ? (item.product.price / EUR_RATE) : item.product.price;
+    total += price * item.qty;
+  }
+  return total;
+}
+
+function renderCart() {
+  const el = document.getElementById('cartItems');
+  if (cart.size === 0 && customAmount === 0) {
+    el.innerHTML = '<div style="color:var(--text3);font-size:12px;padding:10px;text-align:center">Cart is empty. Add products from the Products tab.</div>';
+  } else {
+    let html = '';
+    for (const [id, item] of cart) {
+      const price = currentCurrency === 'EUR' ? (item.product.price / EUR_RATE) : item.product.price;
+      html += `<div class="cart-item">
+        <span>${getProductEmoji(item.product.category)} ${item.product.name} x${item.qty}</span>
+        <span style="display:flex;align-items:center;gap:8px">
+          <strong>${formatAmount(price * item.qty)} ${currentCurrency}</strong>
+          <button onclick="removeFromCart(${id})" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:14px">✕</button>
+        </span>
+      </div>`;
+    }
+    if (customAmount > 0) {
+      html += `<div class="cart-item"><span>💰 Custom Amount</span><strong>${formatAmount(customAmount)} ${currentCurrency}</strong></div>`;
+    }
+    el.innerHTML = html;
+  }
+  const total = getCartTotal();
+  document.getElementById('cartTotal').textContent = `${formatAmount(total)} ${currentCurrency}`;
+  updateTerminalAmount(total);
+}
+
+function updateCustomAmount() {
+  customAmount = parseFloat(document.getElementById('customAmountInput').value) || 0;
+  renderCart();
+}
+
+function updateTerminalAmount(amount) {
+  document.getElementById('termAmount').textContent = formatAmount(amount);
+}
+
+// Payment
+function initiatePayment() {
+  const total = getCartTotal();
+  if (total <= 0) { addLog('err', 'Cannot pay: amount is 0'); return; }
+  
+  let productName = [...cart.values()].map(i => i.product.name).join(' + ') || 'Custom Payment';
+  if (customAmount > 0 && cart.size > 0) productName += ' + Custom';
+  else if (customAmount > 0) productName = 'Custom Payment';
+
+  checkoutState = 'Processing';
+  updateNfcPanel();
+  hideTxResult();
+
+  const recipientId = parseInt(document.getElementById('termRecipientSelect')?.value || '-1', 10);
+
+  sendCmd({
+    cmd: 'PAY',
+    amount: total,
+    currency: currentCurrency,
+    productName: productName,
+    recipientCardId: recipientId > 0 ? recipientId : -1
+  });
+  addLog('info', `💳 Payment initiated: ${formatAmount(total)} ${currentCurrency} — "${productName}" (Recipient: ${recipientId > 0 ? 'Player #' + recipientId : 'Store'})`);
+}
+
+function cancelPayment() {
+  checkoutState = 'Idle';
+  updateNfcPanel();
+  hideTxResult();
+  sendCmd({ cmd: 'CANCEL_PAY' });
+}
+
+async function chargeCardDirectly(cardId) {
+  const card = cards.find(c => c.id === cardId);
+  if (!card) return;
+  const total = getCartTotal();
+  if (total <= 0) { addLog('err', 'Add items or enter amount first'); return; }
+  
+  let productName = [...cart.values()].map(i => i.product.name).join(' + ') || 'Quick Pay';
+  if (customAmount > 0 && cart.size > 0) productName += ' + Custom';
+  else if (customAmount > 0) productName = 'Custom Payment';
+
+  const recipientId = parseInt(document.getElementById('termRecipientSelect')?.value || '-1', 10);
+  
+  addLog('info', `💳 Setting up direct charge...`);
+  await sendCmdAwait({
+    cmd: 'PAY',
+    amount: total,
+    currency: currentCurrency,
+    productName: productName,
+    recipientCardId: recipientId > 0 ? recipientId : -1
+  });
+  
+  addLog('info', `💳 Charging card directly: ${card.cardHolder} (*${(card.cardNumber||'').replace(/\s/g,'').slice(-4)})`);
+  sendCmd({ cmd: 'PAY_WITH_CARD', cardId: card.id });
+}
+
+function simulateNfcTapInput() {
+  const uid = document.getElementById('simNfcUid').value.trim() || '04:A2:8B:1F';
+  addLog('info', `⚡ Simulating NFC tap: ${uid}`);
+  sendCmd({ cmd: 'SIMULATE_NFC_TAP', uid: uid });
+}
+
+async function promptMoneyUpdate(cardId, action) {
+  const card = cards.find(c => c.id === cardId);
+  if (!card) return;
+  const amountStr = prompt(`How much to ${action === 'ADD' ? 'add to' : 'revoke from'} ${card.cardHolder}'s card?`);
+  if (!amountStr) return;
+  const amount = parseFloat(amountStr);
+  if (isNaN(amount) || amount <= 0) {
+    alert("Please enter a valid amount greater than 0");
+    return;
+  }
+  
+  addLog('info', `💸 Requesting ${action} ${amount} ${card.currency} for ${card.cardHolder}...`);
+  const resp = await sendCmdAwait({ cmd: 'UPDATE_MONEY', cardId: card.id, amount: amount, action: action });
+  if (resp.type === 'OK') {
+    addLog('info', `✅ Successfully updated money: ${resp.message}`);
+    sendCmd({cmd: 'GET_CARDS'});
+  } else {
+    addLog('err', `❌ Failed to update money: ${resp.message || 'Unknown error'}`);
+  }
+}
+
+function setSimUid(uid) {
+  document.getElementById('simNfcUid').value = uid;
+  simulateNfcTapInput();
+}
+
+function updateNfcPanel() {
+  const anim = document.getElementById('nfcAnim');
+  const text = document.getElementById('nfcStatusText');
+  const simpleAnim = document.getElementById('simpleNfcAnim');
+  const simpleText = document.getElementById('simpleNfcText');
+  
+  switch(checkoutState) {
+    case 'Processing':
+      if (anim) { anim.className = 'nfc-anim waiting'; anim.textContent = '📡'; }
+      if (text) { text.textContent = 'Waiting for NFC card tap on phone...'; text.style.color = 'var(--purple)'; }
+      if (simpleAnim) { simpleAnim.className = 'nfc-anim waiting'; simpleAnim.textContent = '📡'; }
+      if (simpleText) { simpleText.textContent = 'Tap card on phone to complete payment!'; simpleText.style.color = 'var(--purple)'; }
+      break;
+    case 'Loading':
+      if (anim) { anim.className = 'nfc-anim waiting'; anim.textContent = '💳'; }
+      if (text) { text.textContent = 'Card detected — Processing payment...'; text.style.color = 'var(--orange)'; }
+      if (simpleAnim) { simpleAnim.className = 'nfc-anim waiting'; simpleAnim.textContent = '💳'; }
+      if (simpleText) { simpleText.textContent = 'Processing payment...'; simpleText.style.color = 'var(--orange)'; }
+      break;
+    case 'Idle':
+    default:
+      if (anim) { anim.className = 'nfc-anim idle'; anim.textContent = '📱'; }
+      if (text) { text.textContent = 'Idle — Ready for payment'; text.style.color = 'var(--text2)'; }
+      if (simpleAnim) { simpleAnim.className = 'nfc-anim idle'; simpleAnim.textContent = '📱'; }
+      if (simpleText) { simpleText.textContent = 'Hold card or watch near phone back'; simpleText.style.color = 'var(--text2)'; }
+      break;
+  }
+}
+
+function showTxResult(success, details) {
+  const el = document.getElementById('txResult');
+  el.className = 'tx-result show ' + (success ? 'success' : 'error');
+  document.getElementById('resultIcon').textContent = success ? '✅' : '❌';
+  document.getElementById('resultText').textContent = success ? 'Payment Successful!' : 'Payment Failed';
+  
+  if (details) {
+    const d = typeof details === 'string' ? details : 
+      `${details.productName || ''} — ${details.amount || ''} ${details.currency || ''}\nTX: ${details.transactionId || ''}`;
+    document.getElementById('resultDetails').textContent = d;
+  }
+  
+  if (success) {
+    cart.clear();
+    customAmount = 0;
+    document.getElementById('customAmountInput').value = '';
+    renderCart();
+    addLog('resp', `✅ Payment completed! ${details?.transactionId || ''}`);
+  }
+  setTimeout(() => hideTxResult(), 8000);
+}
+
+function hideTxResult() {
+  document.getElementById('txResult').className = 'tx-result';
+}
+
+// Terminal Recipient Options
+function renderTerminalRecipientOptions() {
+  const sel = document.getElementById('termRecipientSelect');
+  if (!sel) return;
+  const cur = sel.value;
+  let html = '<option value="-1">🏪 Merchant Store (Default)</option>';
+  cards.forEach(c => {
+    html += `<option value="${c.id}">👤 Pay directly to: ${c.cardHolder} (${c.currency})</option>`;
+  });
+  sel.innerHTML = html;
+  if (cur) sel.value = cur;
+}
+
+function updateTerminalRecipient() {
+  const sel = document.getElementById('termRecipientSelect');
+  const cardId = parseInt(sel.value, 10);
+  sendCmd({ cmd: 'SET_TERMINAL_RECIPIENT', cardId: cardId });
+}
+
+// Bank Hub Portal
+function renderBankCardSelects() {
+  const bSel = document.getElementById('bankCardSelect');
+  const lSel = document.getElementById('loanCardSelect');
+  if (!bSel || !lSel) return;
+
+  const options = cards.map(c => `<option value="${c.id}">${c.cardHolder} (*${(c.cardNumber||'').replace(/\s/g,'').slice(-4)}) - ${c.currency}</option>`).join('');
+  bSel.innerHTML = options || '<option value="-1">No cards available</option>';
+  lSel.innerHTML = options || '<option value="-1">No cards available</option>';
+
+  if (connectedBankCardId > 0) bSel.value = String(connectedBankCardId);
+}
+
+function onBankCardChange() {
+  const cardId = parseInt(document.getElementById('bankCardSelect').value, 10);
+  connectedBankCardId = cardId;
+  renderBankInfo();
+  saveBankConnection();
+}
+
+function renderBankInfo() {
+  const card = cards.find(c => c.id === connectedBankCardId) || cards[0];
+  if (card) {
+    document.getElementById('bankAccountHolder').textContent = card.cardHolder;
+    document.getElementById('bankAccountBalance').textContent = `${formatAmount(card.balance)} ${card.currency}`;
+    document.getElementById('bankDebtDisplay').textContent = `${formatAmount(card.creditDebt || 0)} ${card.currency}`;
+  }
+  const bankCardCountDisplay = document.getElementById('bankCardCountDisplay');
+  if (bankCardCountDisplay) bankCardCountDisplay.textContent = cards.length;
+}
+
+async function saveBankConnection() {
+  const cardId = parseInt(document.getElementById('bankCardSelect').value, 10);
+  const bankName = document.getElementById('bankProviderInput').value.trim() || 'Raiffeisen Bank';
+  const iban = document.getElementById('bankIbanInput').value.trim() || 'RS35-2650-0000-1234';
+
+  formMsg('bankConfigMsg', true, '⏳ Updating bank connection…');
+  const resp = await sendCmdAwait({
+    cmd: 'SET_BANK_CONNECTION',
+    cardId: cardId,
+    bankName: bankName,
+    iban: iban,
+    enabled: true
+  });
+
+  const success = resp.type === 'OK';
+  formMsg('bankConfigMsg', success, (success ? '✅ ' : '❌ ') + (resp.message || 'Bank connection saved!'));
+  if (success) {
+    document.getElementById('bankNameDisplay').textContent = bankName;
+    document.getElementById('bankIbanDisplay').textContent = 'IBAN: ' + iban;
+    document.getElementById('infoBankStatus').textContent = 'Active';
+  }
+}
+
+function setQuickLoan(amt) {
+  document.getElementById('loanAmountInput').value = amt;
+}
+
+async function applyForLoan() {
+  const cardId = parseInt(document.getElementById('loanCardSelect').value, 10);
+  const amount = parseFloat(document.getElementById('loanAmountInput').value) || 0;
+  if (cardId <= 0 || amount <= 0) return formMsg('loanMsg', false, 'Enter valid loan amount and card.');
+
+  formMsg('loanMsg', true, '⏳ Requesting loan approval…');
+  const resp = await sendCmdAwait({ cmd: 'TAKE_LOAN', cardId: cardId, amount: amount });
+  const success = resp.type === 'OK';
+  formMsg('loanMsg', success, (success ? '✅ ' : '❌ ') + (resp.message || 'Loan approved!'));
+  if (success) {
+    sendCmd({ cmd: 'GET_CARDS' });
+    sendCmd({ cmd: 'GET_TRANSACTIONS', limit: 50 });
+  }
+}
+
+async function repayLoan() {
+  const cardId = parseInt(document.getElementById('loanCardSelect').value, 10);
+  const amount = parseFloat(document.getElementById('loanAmountInput').value) || 0;
+  if (cardId <= 0 || amount <= 0) return formMsg('loanMsg', false, 'Enter valid payment amount.');
+
+  formMsg('loanMsg', true, '⏳ Repaying debt…');
+  const resp = await sendCmdAwait({ cmd: 'REPAY_LOAN', cardId: cardId, amount: amount });
+  const success = resp.type === 'OK';
+  formMsg('loanMsg', success, (success ? '✅ ' : '❌ ') + (resp.message || 'Debt repaid!'));
+  if (success) {
+    sendCmd({ cmd: 'GET_CARDS' });
+    sendCmd({ cmd: 'GET_TRANSACTIONS', limit: 50 });
+  }
+}
+
+// Simple Mode Functions
+function simpleAppendNum(ch) {
+  if (simpleAmountStr === '0' && ch !== '.') simpleAmountStr = ch;
+  else if (ch === '.' && simpleAmountStr.includes('.')) return;
+  else simpleAmountStr += ch;
+  updateSimpleAmountDisplay();
+}
+
+function simpleClearNum() {
+  if (simpleAmountStr.length <= 1) simpleAmountStr = '0';
+  else simpleAmountStr = simpleAmountStr.slice(0, -1);
+  updateSimpleAmountDisplay();
+}
+
+function updateSimpleAmountDisplay() {
+  document.getElementById('simpleAmountDisplay').textContent = simpleAmountStr;
+}
+
+function simplePay() {
+  const amt = parseFloat(simpleAmountStr) || 0;
+  if (amt <= 0) { alert('Enter an amount first!'); return; }
+  
+  checkoutState = 'Processing';
+  updateNfcPanel();
+  const recipientId = parseInt(document.getElementById('termRecipientSelect')?.value || '-1', 10);
+  sendCmd({ cmd: 'PAY', amount: amt, currency: currentCurrency, productName: 'Express POS Charge', recipientCardId: recipientId > 0 ? recipientId : -1 });
+}
+
+function renderSimpleQuickProducts() {
+  const grid = document.getElementById('simpleQuickGrid');
+  if (!grid) return;
+  grid.innerHTML = products.slice(0, 6).map(p => {
+    const price = currentCurrency === 'EUR' ? (p.price / EUR_RATE) : p.price;
+    return `<button class="simple-prod-btn" onclick="simpleQuickAdd(${price})">
+      <div style="font-size:24px">${getProductEmoji(p.category)}</div>
+      <div style="font-size:12px">${p.name}</div>
+      <div style="color:var(--green);font-size:14px;font-weight:800">${formatAmount(price)} ${currentCurrency}</div>
+    </button>`;
+  }).join('');
+}
+
+function simpleQuickAdd(price) {
+  simpleAmountStr = String(Math.round(price));
+  updateSimpleAmountDisplay();
+}
+
+// History
+function renderHistory() {
+  const tbody = document.getElementById('historyBody');
+  tbody.innerHTML = transactions.map(t => {
+    const statusClass = t.status === 'COMPLETED' || t.status === 'APPROVED' ? 'badge-green' : (t.status === 'FAILED' ? 'badge-red' : 'badge-orange');
+    const date = new Date(t.timestamp).toLocaleString();
+    const amount = t.currency === 'EUR' ? `€${t.amount.toFixed(2)}` : `${Math.round(t.amount).toLocaleString()} RSD`;
+    return `<tr>
+      <td style="font-family:monospace;font-size:10px">${t.transactionId}</td>
+      <td><strong>${t.productName}</strong></td>
+      <td style="font-weight:700;color:var(--green)">${amount}</td>
+      <td><span class="badge ${t.currency==='RSD'?'badge-orange':'badge-blue'}">${t.currency}</span></td>
+      <td><span class="badge ${statusClass}">${t.status}</span></td>
+      <td>${t.paymentMethod}</td>
+      <td style="color:var(--text3);font-size:11px">${date}</td>
+    </tr>`;
+  }).join('');
+  document.getElementById('txCount').textContent = `${transactions.length} transactions`;
+}
+
+// Send Money (card to card)
+function cardLabel(c) {
+  const bal = c.currency === 'EUR' ? `€${c.balance.toFixed(2)}` : `${Math.round(c.balance).toLocaleString()} RSD`;
+  return `${c.cardHolder} · *${(c.cardNumber || '').replace(/\s/g, '').slice(-4)} · ${bal}`;
+}
+
+function renderSendCardOptions() {
+  const from = document.getElementById('sendFrom');
+  const to = document.getElementById('sendTo');
+  if (!from || !to) return;
+
+  const prevFrom = from.value, prevTo = to.value;
+  const options = cards.map(c => `<option value="${c.id}">${cardLabel(c)}</option>`).join('');
+
+  if (cards.length === 0) {
+    from.innerHTML = to.innerHTML = '<option value="">No cards — connect phone first</option>';
+  } else {
+    from.innerHTML = options;
+    to.innerHTML = options;
+    if (cards.some(c => String(c.id) === prevFrom)) from.value = prevFrom;
+    if (cards.some(c => String(c.id) === prevTo)) to.value = prevTo;
+    else if (cards.length > 1 && to.value === from.value) to.value = String(cards[1].id);
+  }
+  renderSendPreview();
+}
+
+function selectedSendCards() {
+  const fromId = parseInt(document.getElementById('sendFrom').value, 10);
+  const toId = parseInt(document.getElementById('sendTo').value, 10);
+  return { from: cards.find(c => c.id === fromId), to: cards.find(c => c.id === toId) };
+}
+
+function renderSendPreview() {
+  const { from, to } = selectedSendCards();
+  const fromHint = document.getElementById('sendFromHint');
+  const toHint = document.getElementById('sendToHint');
+  const amtHint = document.getElementById('sendAmountHint');
+  if (!fromHint) return;
+
+  fromHint.textContent = from
+    ? `${from.bankProvider || 'Card'} · balance ${from.currency === 'EUR' ? '€' + from.balance.toFixed(2) : Math.round(from.balance).toLocaleString() + ' RSD'}`
+    : '—';
+  toHint.textContent = to ? `${to.bankProvider || 'Card'} · receives in ${to.currency}` : '—';
+
+  const amount = parseFloat(document.getElementById('sendAmount').value) || 0;
+  if (!from || !to || amount <= 0) {
+    amtHint.textContent = from ? `Amount is taken in ${from.currency}` : "Amount is taken in the sender's currency";
+    return;
+  }
+  if (from.currency === to.currency) {
+    amtHint.textContent = `${to.cardHolder.split(' ')[0]} receives ${amount.toFixed(2)} ${to.currency}`;
+  } else {
+    const converted = from.currency === 'RSD' ? amount / EUR_RATE : amount * EUR_RATE;
+    amtHint.textContent = `${amount.toFixed(2)} ${from.currency} → ${converted.toFixed(2)} ${to.currency} (1 EUR = ${EUR_RATE} RSD)`;
+  }
+}
+
+function swapSendCards() {
+  const from = document.getElementById('sendFrom');
+  const to = document.getElementById('sendTo');
+  const tmp = from.value;
+  from.value = to.value;
+  to.value = tmp;
+  renderSendPreview();
+}
+
+async function sendMoney() {
+  const { from, to } = selectedSendCards();
+  const amount = parseFloat(document.getElementById('sendAmount').value) || 0;
+
+  if (!from || !to) return formMsg('sendMsg', false, 'Pick sender and recipient cards.');
+  if (from.id === to.id) return formMsg('sendMsg', false, 'Sender and recipient must be different.');
+  if (amount <= 0) return formMsg('sendMsg', false, 'Enter amount greater than 0.');
+  if (amount > from.balance) {
+    return formMsg('sendMsg', false, `Not enough balance — ${from.cardHolder} has ${from.balance.toFixed(2)} ${from.currency}.`);
+  }
+
+  formMsg('sendMsg', true, '⏳ Sending…');
+  const resp = await sendCmdAwait({ cmd: 'TRANSFER', sourceCardId: from.id, targetCardId: to.id, amount });
+  const success = resp.type === 'TRANSFER_RESULT' ? resp.success : resp.type === 'OK';
+  formMsg('sendMsg', success, (success ? '✅ ' : '❌ ') + (resp.message || 'Transfer completed'));
+  if (success) {
+    document.getElementById('sendAmount').value = '';
+    sendCmd({ cmd: 'GET_CARDS' });
+    sendCmd({ cmd: 'GET_TRANSACTIONS', limit: 50 });
+  }
+}
+
+// Forms
+function formMsg(id, ok, text) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.className = 'form-msg show ' + (ok ? 'ok' : 'bad');
+  el.textContent = text;
+}
+
+function fillRandomCardNumber() {
+  const prefixes = ['4120', '5120', '9880'];
+  const prefix = prefixes[Math.floor(Math.random() * prefixes.length)];
+  let num = prefix;
+  for (let i = 0; i < 12; i++) num += Math.floor(Math.random() * 10);
+  document.getElementById('ncNumber').value = num.replace(/(.{4})/g, '$1 ').trim();
+}
+
+async function submitAddCard() {
+  const holder = document.getElementById('ncHolder').value.trim();
+  const number = document.getElementById('ncNumber').value.trim();
+  const uid = document.getElementById('ncUid').value.trim();
+  const balance = parseFloat(document.getElementById('ncBalance').value) || 0;
+  const currency = document.getElementById('ncCurrency').value;
+  const colorHex = document.getElementById('ncColor').value;
+  const bankPassword = document.getElementById('ncPassword').value;
+
+  if (!holder) return formMsg('ncMsg', false, 'Card holder name is required.');
+  if (number.replace(/\s/g, '').length < 12) return formMsg('ncMsg', false, 'Card number must be at least 12 digits.');
+
+  formMsg('ncMsg', true, '⏳ Creating card…');
+  const resp = await sendCmdAwait({ cmd: 'ADD_CARD', cardHolder: holder, cardNumber: number, cardUid: uid, balance, currency, colorHex, bankPassword });
+  const success = resp.type === 'OK';
+  formMsg('ncMsg', success, (success ? '✅ ' : '❌ ') + (resp.message || ''));
+  if (success) {
+    ['ncHolder', 'ncNumber', 'ncUid', 'ncPassword'].forEach(id => document.getElementById(id).value = '');
+    document.getElementById('ncBalance').value = '0';
+    sendCmd({ cmd: 'GET_CARDS' });
+  }
+}
+
+async function submitAddProduct() {
+  const name = document.getElementById('npName').value.trim();
+  const price = parseFloat(document.getElementById('npPrice').value) || 0;
+  const category = document.getElementById('npCategory').value.trim() || 'General';
+
+  if (!name) return formMsg('npMsg', false, 'Product name is required.');
+  if (price <= 0) return formMsg('npMsg', false, 'Price must be greater than 0.');
+
+  formMsg('npMsg', true, '⏳ Adding product…');
+  const resp = await sendCmdAwait({ cmd: 'ADD_PRODUCT', name, price, category });
+  const success = resp.type === 'OK';
+  formMsg('npMsg', success, (success ? '✅ ' : '❌ ') + (resp.message || ''));
+  if (success) {
+    document.getElementById('npName').value = '';
+    document.getElementById('npPrice').value = '';
+    sendCmd({ cmd: 'GET_PRODUCTS' });
+  }
+}
+
+// Log
+function addLog(type, msg) {
+  const panel = document.getElementById('logPanel');
+  if (!panel) return;
+  const entry = document.createElement('div');
+  entry.className = 'log-entry ' + type;
+  entry.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+  panel.appendChild(entry);
+  panel.scrollTop = panel.scrollHeight;
+}
+
+function clearLog() {
+  document.getElementById('logPanel').innerHTML = '<div class="log-entry info">[System] Log cleared</div>';
+}
+
+function sendManualCmd() {
+  const input = document.getElementById('manualCmd');
+  try {
+    const cmd = JSON.parse(input.value);
+    sendCmd(cmd);
+    input.value = '';
+  } catch(e) {
+    addLog('err', 'Invalid JSON: ' + e.message);
+  }
+}
+
+// Init
+document.addEventListener('DOMContentLoaded', () => {
+  addLog('info', '🚀 BraiPay WebUSB POS & Bank Terminal ready');
+  if (navigator.usb) {
+    navigator.usb.addEventListener('disconnect', (e) => {
+      if (e.device === usbDevice) {
+        addLog('err', '⚡ USB device disconnected');
+        disconnectUSB();
+      }
+    });
+  }
+});
+</script>
+</body>
+</html>
