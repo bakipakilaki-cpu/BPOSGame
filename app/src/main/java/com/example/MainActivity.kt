@@ -276,15 +276,48 @@ class MainActivity : FragmentActivity() {
                 viewModel = viewModel()
                 
                 val currentContext = LocalContext.current
+                
+                // Request Bluetooth runtime permissions for Android 12+
+                val permissions = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+                    arrayOf(
+                        android.Manifest.permission.BLUETOOTH_CONNECT,
+                        android.Manifest.permission.BLUETOOTH_ADVERTISE,
+                        android.Manifest.permission.BLUETOOTH_SCAN
+                    )
+                } else {
+                    emptyArray()
+                }
+                
+                val launcher = androidx.activity.compose.rememberLauncherForActivityResult(
+                    androidx.activity.result.contract.ActivityResultContracts.RequestMultiplePermissions()
+                ) { permissionsMap ->
+                    val allGranted = permissionsMap.values.all { it }
+                    if (!allGranted && permissions.isNotEmpty()) {
+                        Toast.makeText(currentContext, "Please allow Bluetooth permissions in Settings to connect with the Web Dashboard.", Toast.LENGTH_LONG).show()
+                    } else {
+                        try {
+                            val bleServer = com.example.usb.BraiPayBleServer(currentContext, viewModel)
+                            bleServer.start()
+                        } catch (e: Exception) {
+                            Log.e("MainActivity", "Failed to start BLE Server: ${e.message}")
+                        }
+                    }
+                }
+
                 LaunchedEffect(Unit) {
+                    if (permissions.isNotEmpty()) {
+                        launcher.launch(permissions)
+                    }
                     val usbManager = currentContext.getSystemService(Context.USB_SERVICE) as android.hardware.usb.UsbManager
                     usbBridge = com.example.usb.BraiPayUsbBridge(usbManager, viewModel)
                     
-                    try {
-                        val bleServer = com.example.usb.BraiPayBleServer(currentContext, viewModel)
-                        bleServer.start()
-                    } catch (e: Exception) {
-                        Log.e("MainActivity", "Failed to start BLE Server: ${e.message}")
+                    if (permissions.isEmpty()) {
+                        try {
+                            val bleServer = com.example.usb.BraiPayBleServer(currentContext, viewModel)
+                            bleServer.start()
+                        } catch (e: Exception) {
+                            Log.e("MainActivity", "Failed to start BLE Server: ${e.message}")
+                        }
                     }
 
                     if (intent?.action == android.hardware.usb.UsbManager.ACTION_USB_ACCESSORY_ATTACHED) {
