@@ -1962,3 +1962,46 @@ document.addEventListener('DOMContentLoaded', () => {
 </script>
 </body>
 </html>
+<script>
+let wifiSocket = null;
+function connectWiFi() {
+    let ip = prompt("Enter your Android phone's IP address (e.g. 192.168.1.5):");
+    if (!ip) return;
+    
+    wifiSocket = new WebSocket(`ws://${ip}:8080`);
+    
+    wifiSocket.onopen = () => {
+        alert("Connected to phone via WiFi!");
+        document.getElementById('connDot').className = 'conn-dot connected';
+        document.getElementById('connText').innerText = 'Connected (WiFi)';
+        wifiSocket.send(JSON.stringify({cmd: 'GET_STATUS'}));
+    };
+    
+    wifiSocket.onmessage = (event) => {
+        handleBleData(event.data); // We can reuse the BLE data handler since the format is exactly the same JSON!
+    };
+    
+    wifiSocket.onerror = (error) => {
+        alert("WiFi connection error. Make sure both devices are on the same network and the IP is correct.");
+        console.error("WebSocket Error:", error);
+    };
+    
+    wifiSocket.onclose = () => {
+        document.getElementById('connDot').className = 'conn-dot disconnected';
+        document.getElementById('connText').innerText = 'Disconnected';
+        wifiSocket = null;
+    };
+}
+
+// Override sendCmd to use wifiSocket if available
+const originalSendCmd = sendCmd;
+sendCmd = async function(cmdObj) {
+    if (wifiSocket && wifiSocket.readyState === WebSocket.OPEN) {
+        wifiSocket.send(JSON.stringify(cmdObj));
+    } else {
+        originalSendCmd(cmdObj);
+    }
+};
+</script>
+</body>
+</html>

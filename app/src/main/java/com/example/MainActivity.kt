@@ -1,5 +1,8 @@
 package com.example
 
+import android.net.wifi.WifiManager
+import android.text.format.Formatter
+
 import com.example.ui.TerminalSoundPlayer
 import com.example.ui.generateRandomHexUid
 import com.example.ui.generateRandom7ByteHexUid
@@ -297,6 +300,11 @@ class MainActivity : FragmentActivity() {
                     } else {
                         try {
                             val bleServer = com.example.usb.BraiPayBleServer(currentContext, viewModel)
+                            val wifiServer = com.example.usb.BraiPayWifiServer(currentContext, viewModel)
+                            wifiServer.start()
+                            val wifiManager = currentContext.applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
+                            val ip = Formatter.formatIpAddress(wifiManager.connectionInfo.ipAddress)
+                            Toast.makeText(currentContext, "WiFi Server Running on: " + ip + ":8080", Toast.LENGTH_LONG).show()
                             bleServer.start()
                         } catch (e: Exception) {
                             Log.e("MainActivity", "Failed to start BLE Server: ${e.message}")
@@ -314,6 +322,11 @@ class MainActivity : FragmentActivity() {
                     if (permissions.isEmpty()) {
                         try {
                             val bleServer = com.example.usb.BraiPayBleServer(currentContext, viewModel)
+                            val wifiServer = com.example.usb.BraiPayWifiServer(currentContext, viewModel)
+                            wifiServer.start()
+                            val wifiManager = currentContext.applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
+                            val ip = Formatter.formatIpAddress(wifiManager.connectionInfo.ipAddress)
+                            Toast.makeText(currentContext, "WiFi Server Running on: " + ip + ":8080", Toast.LENGTH_LONG).show()
                             bleServer.start()
                         } catch (e: Exception) {
                             Log.e("MainActivity", "Failed to start BLE Server: ${e.message}")
