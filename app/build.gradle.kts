@@ -98,6 +98,7 @@ dependencies {
   implementation(libs.coil.compose)
   implementation(libs.converter.moshi)
   implementation(libs.firebase.ai)
+  implementation("com.google.firebase:firebase-appdistribution:16.0.0-beta15")
   // Uncomment to use Firestore:
   // implementation(libs.firebase.firestore)
 

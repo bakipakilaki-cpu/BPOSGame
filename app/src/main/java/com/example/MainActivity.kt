@@ -339,6 +339,14 @@ class MainActivity : FragmentActivity() {
                             usbBridge.start(accessory)
                         }
                     }
+
+                    // Automatic check for Firebase App Distribution tester updates if linked
+                    try {
+                        if (com.google.firebase.FirebaseApp.getApps(currentContext).isNotEmpty()) {
+                            com.google.firebase.appdistribution.FirebaseAppDistribution.getInstance()
+                                .updateIfNewReleaseAvailable()
+                        }
+                    } catch (_: Throwable) {}
                 }
 
                 // Handle intent on initial launch
@@ -7114,6 +7122,8 @@ fun BankSettingsDialog(
     viewModel: BraiPayViewModel,
     onDismiss: () -> Unit
 ) {
+    val context = LocalContext.current
+    val clipboardManager = androidx.compose.ui.platform.LocalClipboardManager.current
     val cards by viewModel.allNfcCards.collectAsState()
     val isBankModeEnabled by viewModel.isBankModeEnabled.collectAsState()
     val isSimpleModeEnabled by viewModel.isSimpleModeEnabled.collectAsState()
@@ -7161,7 +7171,7 @@ fun BankSettingsDialog(
                         Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Back")
                     }
                     Text(
-                        text = "Bank Account Setup",
+                        text = "Settings & Distribution",
                         fontSize = 18.sp,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.primary
@@ -7374,6 +7384,216 @@ fun BankSettingsDialog(
                         shape = RoundedCornerShape(10.dp),
                         singleLine = true
                     )
+                }
+
+                // Firebase App Distribution & Info Section
+                HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
+
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f))
+                        .padding(14.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Icon(
+                            Icons.Rounded.Download,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Text(
+                            text = "Firebase App Distribution Info",
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+
+                    Text(
+                        text = "Use these details in Firebase Console to register and distribute this app build to your testers.",
+                        fontSize = 11.sp,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f),
+                        lineHeight = 14.sp
+                    )
+
+                    // Package Name (Application ID)
+                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Text(
+                            text = "Package Name (Application ID):",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "com.aistudio.braipay.qxzrtv",
+                                fontSize = 12.sp,
+                                fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            IconButton(
+                                onClick = {
+                                    clipboardManager.setText(androidx.compose.ui.text.AnnotatedString("com.aistudio.braipay.qxzrtv"))
+                                    Toast.makeText(context, "Copied Package Name!", Toast.LENGTH_SHORT).show()
+                                },
+                                modifier = Modifier.size(28.dp)
+                            ) {
+                                Icon(Icons.Rounded.ContentCopy, contentDescription = "Copy", modifier = Modifier.size(16.dp))
+                            }
+                        }
+                    }
+
+                    // Version & Build Code
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column {
+                            Text("Version Name:", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
+                            Text("1.0", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        }
+                        Column {
+                            Text("Version Code:", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
+                            Text("1", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        }
+                        Column {
+                            Text("Min / Target SDK:", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
+                            Text("24 / 36", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+
+                    // SHA-1 Fingerprint
+                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Text(
+                            text = "Debug Certificate SHA-1:",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "B3:AA:E7:D8:59:8C:45:AC:08:6E:F3:BF:88:D2:29:81:B3:74:20:21",
+                                fontSize = 10.sp,
+                                fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.85f),
+                                modifier = Modifier.weight(1f)
+                            )
+                            IconButton(
+                                onClick = {
+                                    clipboardManager.setText(androidx.compose.ui.text.AnnotatedString("B3:AA:E7:D8:59:8C:45:AC:08:6E:F3:BF:88:D2:29:81:B3:74:20:21"))
+                                    Toast.makeText(context, "Copied SHA-1!", Toast.LENGTH_SHORT).show()
+                                },
+                                modifier = Modifier.size(28.dp)
+                            ) {
+                                Icon(Icons.Rounded.ContentCopy, contentDescription = "Copy", modifier = Modifier.size(16.dp))
+                            }
+                        }
+                    }
+
+                    // SHA-256 Fingerprint
+                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Text(
+                            text = "Debug Certificate SHA-256:",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "71:38:D7:6C:6B:CA:76:AC:39:86:5E:2D:0D:AE:88:E9:34:8E:75:0E:0E:72:F8:38:2F:16:5D:94:66:2F:D4:56",
+                                fontSize = 9.sp,
+                                fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.85f),
+                                modifier = Modifier.weight(1f)
+                            )
+                            IconButton(
+                                onClick = {
+                                    clipboardManager.setText(androidx.compose.ui.text.AnnotatedString("71:38:D7:6C:6B:CA:76:AC:39:86:5E:2D:0D:AE:88:E9:34:8E:75:0E:0E:72:F8:38:2F:16:5D:94:66:2F:D4:56"))
+                                    Toast.makeText(context, "Copied SHA-256!", Toast.LENGTH_SHORT).show()
+                                },
+                                modifier = Modifier.size(28.dp)
+                            ) {
+                                Icon(Icons.Rounded.ContentCopy, contentDescription = "Copy", modifier = Modifier.size(16.dp))
+                            }
+                        }
+                    }
+
+                    // Actions Row
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        OutlinedButton(
+                            onClick = {
+                                val fullInfo = """
+                                    BPOSGame (BraiPay) - Firebase Distribution Info:
+                                    • Package Name / Application ID: com.aistudio.braipay.qxzrtv
+                                    • Version Name: 1.0
+                                    • Version Code: 1
+                                    • Min SDK: 24 (Android 7.0)
+                                    • Target SDK: 36 (Android 16)
+                                    • SHA-1: B3:AA:E7:D8:59:8C:45:AC:08:6E:F3:BF:88:D2:29:81:B3:74:20:21
+                                    • SHA-256: 71:38:D7:6C:6B:CA:76:AC:39:86:5E:2D:0D:AE:88:E9:34:8E:75:0E:0E:72:F8:38:2F:16:5D:94:66:2F:D4:56
+                                """.trimIndent()
+                                clipboardManager.setText(androidx.compose.ui.text.AnnotatedString(fullInfo))
+                                Toast.makeText(context, "All Firebase App Info copied to clipboard!", Toast.LENGTH_LONG).show()
+                            },
+                            modifier = Modifier.weight(1f).height(38.dp),
+                            shape = RoundedCornerShape(8.dp),
+                            contentPadding = PaddingValues(horizontal = 8.dp)
+                        ) {
+                            Icon(Icons.Rounded.ContentCopy, contentDescription = null, modifier = Modifier.size(14.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Copy Info", fontSize = 11.sp, maxLines = 1)
+                        }
+
+                        Button(
+                            onClick = {
+                                try {
+                                    if (com.google.firebase.FirebaseApp.getApps(context).isEmpty()) {
+                                        Toast.makeText(context, "Firebase not yet linked (requires google-services.json). Upload your APK in Firebase Console -> App Distribution!", Toast.LENGTH_LONG).show()
+                                    } else {
+                                        com.google.firebase.appdistribution.FirebaseAppDistribution.getInstance()
+                                            .updateIfNewReleaseAvailable()
+                                            .addOnSuccessListener {
+                                                Toast.makeText(context, "Checked for updates: You are on the newest tester release!", Toast.LENGTH_SHORT).show()
+                                            }
+                                            .addOnFailureListener { e ->
+                                                Toast.makeText(context, "Firebase Update Check: ${e.message}", Toast.LENGTH_SHORT).show()
+                                            }
+                                    }
+                                } catch (e: Throwable) {
+                                    Toast.makeText(context, "App Distribution check: ${e.message}", Toast.LENGTH_SHORT).show()
+                                }
+                            },
+                            modifier = Modifier.weight(1f).height(38.dp),
+                            shape = RoundedCornerShape(8.dp),
+                            contentPadding = PaddingValues(horizontal = 8.dp)
+                        ) {
+                            Icon(Icons.Rounded.Refresh, contentDescription = null, modifier = Modifier.size(14.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Check Update", fontSize = 11.sp, maxLines = 1)
+                        }
+                    }
                 }
 
                 Spacer(modifier = Modifier.height(8.dp))
