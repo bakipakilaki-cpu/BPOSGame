@@ -7422,6 +7422,21 @@ fun BankSettingsDialog(
                         lineHeight = 14.sp
                     )
 
+                    // Firebase Project & App ID
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column {
+                            Text("Firebase Project:", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
+                            Text("bp-technology", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                        }
+                        Column(horizontalAlignment = Alignment.End) {
+                            Text("Firebase Status:", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
+                            Text("Linked (google-services)", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.tertiary)
+                        }
+                    }
+
                     // Package Name (Application ID)
                     Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                         Text(
@@ -7546,6 +7561,8 @@ fun BankSettingsDialog(
                             onClick = {
                                 val fullInfo = """
                                     BPOSGame (BraiPay) - Firebase Distribution Info:
+                                    • Firebase Project: bp-technology (166893402055)
+                                    • Firebase App ID: 1:166893402055:android:81a58a67f57e1549d50be2
                                     • Package Name / Application ID: com.aistudio.braipay.qxzrtv
                                     • Version Name: 1.0
                                     • Version Code: 1

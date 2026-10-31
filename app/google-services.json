@@ -1,0 +1,40 @@
+{
+  "project_info": {
+    "project_number": "166893402055",
+    "firebase_url": "https://bp-technology-default-rtdb.europe-west1.firebasedatabase.app",
+    "project_id": "bp-technology",
+    "storage_bucket": "bp-technology.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:166893402055:android:81a58a67f57e1549d50be2",
+        "android_client_info": {
+          "package_name": "com.aistudio.braipay.qxzrtv"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "166893402055-20n3d8njjknnan74gk9279d16jol3u63.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAkRpoNPjHD9qnIYdGk6ICl3HhiUviD4LU"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "166893402055-20n3d8njjknnan74gk9279d16jol3u63.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
