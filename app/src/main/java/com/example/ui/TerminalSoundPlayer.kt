@@ -100,4 +100,37 @@ object TerminalSoundPlayer {
     fun playErrorBuzzer() {
         playSineWave(220.0, 350, 0.8)
     }
+
+    // ATM Cash Dispenser rhythmic sound
+    fun playAtmDispenseSound() {
+        Thread {
+            for (i in 1..4) {
+                playSineWave(700.0, 35, 0.4)
+                Thread.sleep(70)
+            }
+            playSineWave(1200.0, 150, 0.6)
+        }.start()
+    }
+
+    // Casino Win fanfare
+    fun playCasinoWinSound() {
+        Thread {
+            playSineWave(523.25, 70, 0.6) // C5
+            Thread.sleep(80)
+            playSineWave(659.25, 70, 0.6) // E5
+            Thread.sleep(80)
+            playSineWave(783.99, 70, 0.6) // G5
+            Thread.sleep(80)
+            playSineWave(1046.50, 180, 0.8) // C6
+        }.start()
+    }
+
+    // Casino Loss tone
+    fun playCasinoLossSound() {
+        Thread {
+            playSineWave(440.0, 100, 0.6)
+            Thread.sleep(110)
+            playSineWave(330.0, 180, 0.6)
+        }.start()
+    }
 }

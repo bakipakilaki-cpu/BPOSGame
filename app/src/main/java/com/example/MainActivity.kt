@@ -98,6 +98,10 @@ import androidx.compose.material.icons.rounded.Tune
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.compose.ui.layout.ContentScale
 import coil.compose.AsyncImage
+import androidx.compose.material.icons.rounded.LocalAtm
+import androidx.compose.material.icons.rounded.Casino
+import com.example.ui.AtmScreen
+import com.example.ui.CasinoScreen
 import androidx.compose.material.icons.rounded.CreditCard
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.ContentCopy
@@ -492,9 +496,11 @@ fun BraiPayAppContent(
                 ) {
                     val tabItems = mutableListOf(
                         Triple("Terminal", Icons.Rounded.Storefront, 0),
+                        Triple("ATM (RSD)", Icons.Rounded.LocalAtm, 5),
+                        Triple("Casino", Icons.Rounded.Casino, 6),
+                        Triple("Cards", Icons.Rounded.Contactless, 3),
                         Triple("History", Icons.Rounded.History, 1),
-                        Triple("Catalog", Icons.Rounded.LibraryAdd, 2),
-                        Triple("Play Cards", Icons.Rounded.Contactless, 3)
+                        Triple("Catalog", Icons.Rounded.LibraryAdd, 2)
                     )
                     if (isBankModeEnabled) {
                         tabItems.add(Triple("Bank Hub", Icons.Rounded.AccountBalance, 4))
@@ -504,8 +510,8 @@ fun BraiPayAppContent(
                         NavigationBarItem(
                             selected = currentTab == tabIndex,
                             onClick = { currentTab = tabIndex },
-                            icon = { Icon(icon, contentDescription = label, modifier = Modifier.size(24.dp)) },
-                            label = { Text(label, fontSize = 11.sp, fontWeight = FontWeight.Bold) },
+                            icon = { Icon(icon, contentDescription = label, modifier = Modifier.size(22.dp)) },
+                            label = { Text(label, fontSize = 9.sp, fontWeight = FontWeight.Bold, maxLines = 1) },
                             colors = NavigationBarItemDefaults.colors(
                                 selectedIconColor = MaterialTheme.colorScheme.primary,
                                 selectedTextColor = MaterialTheme.colorScheme.primary,
@@ -584,7 +590,9 @@ fun BraiPayAppContent(
                     onCurrencyChange = { viewModel.selectCurrency(it) },
                     onToggleSandbox = { viewModel.toggleSandboxMode(it) },
                     onDownloadRaiPos = { viewModel.redirectToPlayStore(context) },
-                    onOpenSettings = { showSettingsDialog = true }
+                    onOpenSettings = { showSettingsDialog = true },
+                    activeTab = currentTab,
+                    onSelectTab = { currentTab = it }
                 )
             }
 
@@ -622,7 +630,9 @@ fun BraiPayAppContent(
                     1 -> HistoryLogsScreen(viewModel = viewModel)
                     2 -> CatalogScreen(viewModel = viewModel)
                     3 -> NfcCardsScreen(viewModel = viewModel)
-                    4 -> if (isBankModeEnabled) BankHubScreen(viewModel = viewModel)
+                    4 -> if (isBankModeEnabled) BankHubScreen(viewModel = viewModel, onNavigateToTab = { currentTab = it })
+                    5 -> AtmScreen(viewModel = viewModel)
+                    6 -> CasinoScreen(viewModel = viewModel)
                 }
             }
         }
@@ -679,7 +689,9 @@ fun BraiPayHeader(
     onCurrencyChange: (String) -> Unit,
     onToggleSandbox: (Boolean) -> Unit,
     onDownloadRaiPos: () -> Unit,
-    onOpenSettings: () -> Unit
+    onOpenSettings: () -> Unit,
+    activeTab: Int = 0,
+    onSelectTab: (Int) -> Unit = {}
 ) {
     Column(
         modifier = Modifier
@@ -841,6 +853,49 @@ fun BraiPayHeader(
                 }
             }
         }
+
+        Spacer(modifier = Modifier.height(10.dp))
+
+        // Quick Navigation Mode Strip (POS, ATM, Casino, Cards, Bank, History)
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            HeaderQuickChip("🛒 POS Terminal", isSelected = activeTab == 0) { onSelectTab(0) }
+            HeaderQuickChip("🏧 Bankomat (RSD)", isSelected = activeTab == 5, activeColor = Color(0xFF0D9488)) { onSelectTab(5) }
+            HeaderQuickChip("🎰 Kazino (50/50)", isSelected = activeTab == 6, activeColor = Color(0xFFD97706)) { onSelectTab(6) }
+            HeaderQuickChip("💳 Kartice", isSelected = activeTab == 3) { onSelectTab(3) }
+            HeaderQuickChip("🏛️ Bank Hub", isSelected = activeTab == 4) { onSelectTab(4) }
+            HeaderQuickChip("📜 Istorija", isSelected = activeTab == 1) { onSelectTab(1) }
+        }
+    }
+}
+
+@Composable
+fun HeaderQuickChip(
+    text: String,
+    isSelected: Boolean,
+    activeColor: Color = MaterialTheme.colorScheme.primary,
+    onClick: () -> Unit
+) {
+    Surface(
+        shape = RoundedCornerShape(20.dp),
+        color = if (isSelected) activeColor else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+        border = androidx.compose.foundation.BorderStroke(
+            1.dp,
+            if (isSelected) activeColor else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f)
+        ),
+        modifier = Modifier.clickable { onClick() }
+    ) {
+        Text(
+            text = text,
+            fontSize = 11.sp,
+            fontWeight = if (isSelected) FontWeight.Black else FontWeight.Bold,
+            color = if (isSelected) Color.White else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.75f),
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
+        )
     }
 }
 
@@ -7633,7 +7688,10 @@ fun BankSettingsDialog(
 }
 
 @Composable
-fun BankHubScreen(viewModel: BraiPayViewModel) {
+fun BankHubScreen(
+    viewModel: BraiPayViewModel,
+    onNavigateToTab: (Int) -> Unit = {}
+) {
     val context = LocalContext.current
     val cards by viewModel.allNfcCards.collectAsState()
     val connectedCardId by viewModel.connectedBankUserCardId.collectAsState()
@@ -8135,6 +8193,38 @@ fun BankHubScreen(viewModel: BraiPayViewModel) {
                         Icon(Icons.Rounded.Info, contentDescription = null, modifier = Modifier.size(16.dp))
                         Spacer(modifier = Modifier.width(6.dp))
                         Text("More Info / View CVV & Expiry", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                    }
+
+                    // ATM & Casino Quick Launch Row in Bank Hub
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Button(
+                            onClick = { onNavigateToTab(5) },
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(42.dp),
+                            shape = RoundedCornerShape(10.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0D9488))
+                        ) {
+                            Icon(Icons.Rounded.LocalAtm, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("ATM Isplata (RSD)", fontWeight = FontWeight.Bold, fontSize = 11.sp)
+                        }
+
+                        Button(
+                            onClick = { onNavigateToTab(6) },
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(42.dp),
+                            shape = RoundedCornerShape(10.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFD97706))
+                        ) {
+                            Icon(Icons.Rounded.Casino, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Kazino (50/50)", fontWeight = FontWeight.Bold, fontSize = 11.sp)
+                        }
                     }
                 }
             }

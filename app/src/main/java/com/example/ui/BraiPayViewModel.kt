@@ -1788,6 +1788,137 @@ class BraiPayViewModel(application: Application) : AndroidViewModel(application)
         }
         return false
     }
+
+    // ATM Cash Withdrawal (RSD)
+    fun withdrawFromAtm(
+        cardId: Int,
+        rsdAmount: Double,
+        pin: String = "",
+        onResult: (Boolean, String, Double) -> Unit
+    ) {
+        viewModelScope.launch {
+            if (rsdAmount <= 0) {
+                onResult(false, "Molimo izaberite validan iznos za isplatu (Select valid amount).", 0.0)
+                return@launch
+            }
+
+            val card = allNfcCards.value.find { it.id == cardId }
+            if (card == null) {
+                onResult(false, "Kartica nije pronađena u sistemu (Card not found).", 0.0)
+                return@launch
+            }
+
+            // Optional PIN verification if card has a bank password or CVV set
+            if (card.bankPassword.isNotBlank() && pin.isNotBlank() && pin != card.bankPassword && pin != card.cvv) {
+                onResult(false, "Pogrešan PIN kod kartice! (Invalid ATM PIN).", 0.0)
+                return@launch
+            }
+
+            // Convert RSD amount to card's native currency (1 EUR = 117.0 RSD)
+            val amountInCardCurrency = if (card.currency == "RSD") {
+                rsdAmount
+            } else {
+                rsdAmount / 117.0
+            }
+
+            if (card.balance < amountInCardCurrency) {
+                val availableRsd = if (card.currency == "RSD") card.balance else card.balance * 117.0
+                onResult(false, "Nedovoljno sredstava! Raspoloživo: ${String.format(java.util.Locale.US, "%.2f", availableRsd)} RSD.", availableRsd)
+                return@launch
+            }
+
+            val newBalance = card.balance - amountInCardCurrency
+            val updatedCard = card.copy(balance = newBalance)
+            repository.insertNfcCard(updatedCard)
+
+            val remainingRsd = if (updatedCard.currency == "RSD") updatedCard.balance else updatedCard.balance * 117.0
+
+            val tx = TransactionHistory(
+                productName = "ATM Isplata Gotovine (${String.format(java.util.Locale.US, "%.0f", rsdAmount)} RSD)",
+                amount = rsdAmount,
+                currency = "RSD",
+                status = "APPROVED",
+                paymentMethod = "Bankomat / ATM",
+                transactionId = "ATM-${System.currentTimeMillis()}"
+            )
+            repository.insertTransaction(tx)
+
+            onResult(true, "Uspešna isplata: ${String.format(java.util.Locale.US, "%.0f", rsdAmount)} RSD!", remainingRsd)
+        }
+    }
+
+    // Casino 50/50 Bet (Double or Nothing)
+    fun playCasino5050(
+        cardId: Int,
+        betRsdAmount: Double,
+        choiceIsRedOrHeads: Boolean,
+        onResult: (Boolean, Boolean, Boolean, Double, String) -> Unit
+    ) {
+        viewModelScope.launch {
+            if (betRsdAmount <= 0) {
+                onResult(false, false, false, 0.0, "Ulog mora biti veći od 0 RSD.")
+                return@launch
+            }
+
+            val card = allNfcCards.value.find { it.id == cardId }
+            if (card == null) {
+                onResult(false, false, false, 0.0, "Izaberite karticu za igru.")
+                return@launch
+            }
+
+            val betInCardCurrency = if (card.currency == "RSD") {
+                betRsdAmount
+            } else {
+                betRsdAmount / 117.0
+            }
+
+            if (card.balance < betInCardCurrency) {
+                val availableRsd = if (card.currency == "RSD") card.balance else card.balance * 117.0
+                onResult(false, false, false, 0.0, "Nedovoljno sredstava za ulog! Raspoloživo: ${String.format(java.util.Locale.US, "%.2f", availableRsd)} RSD.")
+                return@launch
+            }
+
+            // Provably fair exact 50/50 probability
+            val outcomeIsRedOrHeads = kotlin.random.Random.nextBoolean()
+            val isWin = (choiceIsRedOrHeads == outcomeIsRedOrHeads)
+
+            val newBalance = if (isWin) {
+                // Player wins double their bet (net profit +1x bet)
+                card.balance + betInCardCurrency
+            } else {
+                // Player loses bet
+                (card.balance - betInCardCurrency).coerceAtLeast(0.0)
+            }
+
+            val updatedCard = card.copy(balance = newBalance)
+            repository.insertNfcCard(updatedCard)
+
+            val remainingRsd = if (updatedCard.currency == "RSD") updatedCard.balance else updatedCard.balance * 117.0
+
+            val tx = TransactionHistory(
+                productName = if (isWin) {
+                    "Casino 50/50 DOBITAK (+${String.format(java.util.Locale.US, "%.0f", betRsdAmount)} RSD)"
+                } else {
+                    "Casino 50/50 Gubitak (-${String.format(java.util.Locale.US, "%.0f", betRsdAmount)} RSD)"
+                },
+                amount = betRsdAmount,
+                currency = "RSD",
+                status = "APPROVED",
+                paymentMethod = "Casino 50/50",
+                transactionId = "CASINO-${System.currentTimeMillis()}"
+            )
+            repository.insertTransaction(tx)
+
+            val winAmount = if (isWin) betRsdAmount * 2.0 else 0.0
+            val message = if (isWin) {
+                "🎉 ČESTITAMO! POGODAK! Osvojili ste ${String.format(java.util.Locale.US, "%.0f", winAmount)} RSD!"
+            } else {
+                "Više sreće sledeći put! Izgubili ste ${String.format(java.util.Locale.US, "%.0f", betRsdAmount)} RSD."
+            }
+
+            onResult(true, isWin, outcomeIsRedOrHeads, remainingRsd, message)
+        }
+    }
 }
 
 fun generateRandomHexUid(): String {
