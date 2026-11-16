@@ -134,6 +134,16 @@ object TerminalSoundPlayer {
         }.start()
     }
 
+    // Reel Stop click sound for slot machines
+    fun playReelStopSound() {
+        playSineWave(880.0, 45, 0.5)
+    }
+
+    // Light ticking sound during slot spin
+    fun playSlotSpinTick() {
+        playSineWave(600.0, 25, 0.3)
+    }
+
     // Mega Jackpot Fanfare (Rich ascending arpeggio)
     fun playMegaJackpotFanfare() {
         Thread {

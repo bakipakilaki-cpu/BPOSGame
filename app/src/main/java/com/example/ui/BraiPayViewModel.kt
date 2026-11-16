@@ -223,6 +223,11 @@ class BraiPayViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
+    fun setConnectedBankUserCardId(cardId: Int) {
+        _connectedBankUserCardId.value = cardId
+        prefs.edit().putInt("connected_bank_card_id", cardId).apply()
+    }
+
     fun setBankConnection(cardId: Int, iban: String, bankName: String, enabled: Boolean) {
         _connectedBankUserCardId.value = cardId
         _customBankAccountIban.value = iban
@@ -315,6 +320,7 @@ class BraiPayViewModel(application: Application) : AndroidViewModel(application)
         cardStyle: String,
         requestedLimit: Double,
         currency: String,
+        cardPin: String = "1234",
         onResult: (Boolean, String) -> Unit
     ) {
         viewModelScope.launch {
@@ -338,7 +344,7 @@ class BraiPayViewModel(application: Application) : AndroidViewModel(application)
                 creditDebt = 0.0,
                 creditInterestRate = 0.08,
                 monthlyRepaymentPct = 0.15,
-                bankPassword = "1234",
+                bankPassword = cardPin.ifBlank { "1234" },
                 cvv = newCvv
             )
 
@@ -1726,6 +1732,7 @@ class BraiPayViewModel(application: Application) : AndroidViewModel(application)
         bankName: String,
         creditLimit: Double,
         cardStyle: String,
+        cardPin: String = "1234",
         onResult: (Boolean, String) -> Unit
     ) {
         viewModelScope.launch {
@@ -1745,7 +1752,7 @@ class BraiPayViewModel(application: Application) : AndroidViewModel(application)
                 cardStyle = cardStyle,
                 bankProvider = bankName,
                 cvv = newCvv,
-                bankPassword = parentCard?.bankPassword ?: "1234"
+                bankPassword = cardPin.ifBlank { parentCard?.bankPassword?.ifBlank { "1234" } ?: "1234" }
             )
             repository.insertNfcCard(newCard)
             onResult(true, "Credit card successfully issued for $bankName ($cardStyle) with ${String.format("%.0f", creditLimit)} limit!")
@@ -1808,9 +1815,14 @@ class BraiPayViewModel(application: Application) : AndroidViewModel(application)
                 return@launch
             }
 
-            // Optional PIN verification if card has a bank password or CVV set
-            if (card.bankPassword.isNotBlank() && pin.isNotBlank() && pin != card.bankPassword && pin != card.cvv) {
-                onResult(false, "Pogrešan PIN kod kartice! (Invalid ATM PIN).", 0.0)
+            // Mandatory PIN verification
+            val expectedPin = if (card.bankPassword.isNotBlank()) card.bankPassword else "1234"
+            if (pin.isBlank()) {
+                onResult(false, "Molimo unesite 4-cifreni PIN kod kartice!", 0.0)
+                return@launch
+            }
+            if (pin != expectedPin && pin != card.cvv) {
+                onResult(false, "Pogrešan PIN kod kartice! Proverite PIN i pokušajte ponovo.", 0.0)
                 return@launch
             }
 
@@ -1844,6 +1856,121 @@ class BraiPayViewModel(application: Application) : AndroidViewModel(application)
             repository.insertTransaction(tx)
 
             onResult(true, "Uspešna isplata: ${String.format(java.util.Locale.US, "%.0f", rsdAmount)} RSD!", remainingRsd)
+        }
+    }
+
+    // Casino Slot Machine (Authentic 3 Reels) + Hidden 3-Click 777 Mega Jackpot
+    fun playSlotMachine(
+        cardId: Int,
+        betRsdAmount: Double,
+        isJackpot: Boolean = false,
+        onResult: (Boolean, Boolean, List<String>, Double, Double, String) -> Unit
+    ) {
+        viewModelScope.launch {
+            try {
+                if (betRsdAmount <= 0) {
+                    onResult(false, false, listOf("🍒", "🍋", "7️⃣"), 0.0, 0.0, "Ulog mora biti veći od 0 RSD.")
+                    return@launch
+                }
+
+                val card = allNfcCards.value.find { it.id == cardId }
+                if (card == null) {
+                    onResult(false, false, listOf("🍒", "🍋", "7️⃣"), 0.0, 0.0, "Izaberite karticu za igru.")
+                    return@launch
+                }
+
+                val betInCardCurrency = if (card.currency == "RSD") betRsdAmount else betRsdAmount / 117.0
+
+                if (card.balance < betInCardCurrency) {
+                    val availableRsd = if (card.currency == "RSD") card.balance else card.balance * 117.0
+                    onResult(false, false, listOf("🍒", "🍋", "7️⃣"), 0.0, 0.0, "Nedovoljno sredstava za ulog! Raspoloživo: ${String.format(java.util.Locale.US, "%.2f", availableRsd)} RSD.")
+                    return@launch
+                }
+
+                val symbolsPool = listOf("7️⃣", "💎", "👑", "🔔", "🍇", "🍋", "🍒")
+
+                val finalSymbols: List<String>
+                val multiplier: Double
+                val isWin: Boolean
+
+                if (isJackpot) {
+                    // Hidden guaranteed 777 Mega Jackpot (10x payout)
+                    finalSymbols = listOf("7️⃣", "7️⃣", "7️⃣")
+                    multiplier = 10.0
+                    isWin = true
+                } else {
+                    // 50% Win Rate high excitement casino action
+                    val willWin = kotlin.random.Random.nextBoolean()
+                    if (willWin) {
+                        isWin = true
+                        val winRoll = kotlin.random.Random.nextInt(100)
+                        if (winRoll < 10) {
+                            finalSymbols = listOf("💎", "💎", "💎")
+                            multiplier = 5.0
+                        } else if (winRoll < 25) {
+                            val royal = if (kotlin.random.Random.nextBoolean()) "👑" else "🔔"
+                            finalSymbols = listOf(royal, royal, royal)
+                            multiplier = 3.5
+                        } else if (winRoll < 50) {
+                            val fruit = listOf("🍇", "🍋", "🍒").random()
+                            finalSymbols = listOf(fruit, fruit, fruit)
+                            multiplier = 2.5
+                        } else {
+                            // 2 of a kind matching
+                            val matched = symbolsPool.random()
+                            val other = symbolsPool.filter { it != matched }.random()
+                            val list = mutableListOf(matched, matched, other).shuffled()
+                            finalSymbols = list
+                            multiplier = 1.5
+                        }
+                    } else {
+                        isWin = false
+                        finalSymbols = symbolsPool.shuffled().take(3)
+                        multiplier = 0.0
+                    }
+                }
+
+                val winAmount = if (isWin) betRsdAmount * multiplier else 0.0
+                val profitInCardCurrency = if (isWin) {
+                    betInCardCurrency * (multiplier - 1.0)
+                } else {
+                    -betInCardCurrency
+                }
+
+                val newBalance = (card.balance + profitInCardCurrency).coerceAtLeast(0.0)
+                val updatedCard = card.copy(balance = newBalance)
+                repository.insertNfcCard(updatedCard)
+
+                val remainingRsd = if (updatedCard.currency == "RSD") updatedCard.balance else updatedCard.balance * 117.0
+
+                val tx = TransactionHistory(
+                    productName = if (isJackpot) {
+                        "🎰 777 MEGA JACKPOT (10x: +${String.format(java.util.Locale.US, "%.0f", winAmount)} RSD)"
+                    } else if (isWin) {
+                        "Slot Dobitak ${finalSymbols.joinToString("")} (+${String.format(java.util.Locale.US, "%.0f", winAmount)} RSD)"
+                    } else {
+                        "Slot Gubitak (-${String.format(java.util.Locale.US, "%.0f", betRsdAmount)} RSD)"
+                    },
+                    amount = if (isWin) winAmount else betRsdAmount,
+                    currency = "RSD",
+                    status = "APPROVED",
+                    paymentMethod = if (isJackpot) "Slot 777 JACKPOT" else "Slot Aparat",
+                    transactionId = "SLOT-${System.currentTimeMillis()}"
+                )
+                repository.insertTransaction(tx)
+
+                val message = if (isJackpot) {
+                    "🚨🎰 777 MEGA JACKPOT! 💥 Tri sedmice! Osvojili ste neverovatnih ${String.format(java.util.Locale.US, "%,.0f", winAmount)} RSD (10X)!"
+                } else if (isWin) {
+                    "🎉 POGODAK [ ${finalSymbols.joinToString(" ")} ]! Osvojili ste ${String.format(java.util.Locale.US, "%,.0f", winAmount)} RSD (${String.format(java.util.Locale.US, "%.1f", multiplier)}X)!"
+                } else {
+                    "Više sreće sledeći put! [ ${finalSymbols.joinToString(" ")} ]"
+                }
+
+                onResult(true, isWin, finalSymbols, winAmount, remainingRsd, message)
+            } catch (e: Exception) {
+                onResult(false, false, listOf("🍒", "🍋", "7️⃣"), 0.0, 0.0, "Greška: ${e.localizedMessage}")
+            }
         }
     }
 

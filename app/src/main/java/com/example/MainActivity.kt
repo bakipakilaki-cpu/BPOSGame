@@ -3345,7 +3345,7 @@ fun NfcCardsScreen(
     var cardNumber by remember { mutableStateOf(generateRandomCardNumber("Visa")) }
     var initialBalance by remember { mutableStateOf("100.00") }
     var linkNfcUid by remember { mutableStateOf("") }
-    var bankPasswordInput by remember { mutableStateOf("") }
+    var bankPasswordInput by remember { mutableStateOf("1234") }
     var showRegisterPassword by remember { mutableStateOf(false) }
     
     var pendingAdminAction by remember { mutableStateOf<(() -> Unit)?>(null) }
@@ -3664,12 +3664,13 @@ fun NfcCardsScreen(
 
                     OutlinedTextField(
                         value = bankPasswordInput,
-                        onValueChange = { bankPasswordInput = it },
-                        label = { Text("Choose Bank Access Password / PIN") },
-                        placeholder = { Text("e.g. 1234 or secret word") },
+                        onValueChange = { if (it.length <= 6) bankPasswordInput = it },
+                        label = { Text("Izaberite PIN za Bankomat (4 cifre)") },
+                        placeholder = { Text("npr. 1234") },
                         modifier = Modifier.fillMaxWidth().testTag("nfc_bank_password_input"),
                         shape = RoundedCornerShape(10.dp),
                         singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
                         visualTransformation = if (showRegisterPassword) androidx.compose.ui.text.input.VisualTransformation.None else androidx.compose.ui.text.input.PasswordVisualTransformation(),
                         trailingIcon = {
                             IconButton(onClick = { showRegisterPassword = !showRegisterPassword }) {
@@ -3900,7 +3901,7 @@ fun NfcCardsScreen(
                                     balance = parsedBal,
                                     currency = selectedCurrency,
                                     colorHex = selectedColorHex,
-                                    bankPassword = bankPasswordInput,
+                                    bankPassword = bankPasswordInput.ifBlank { "1234" },
                                     customImageUri = cardCustomImageUriString
                                 )
 
@@ -3909,7 +3910,7 @@ fun NfcCardsScreen(
                                 cardNumber = generateRandomCardNumber(selectedCardProvider)
                                 initialBalance = "100.00"
                                 linkNfcUid = ""
-                                bankPasswordInput = ""
+                                bankPasswordInput = "1234"
                                 cardCustomImageUriString = null
                                 viewModel.setScannedNfcUid(null)
                                 Toast.makeText(context, "Play Card successfully registered!", Toast.LENGTH_SHORT).show()
@@ -4926,9 +4927,7 @@ fun CardMoreInfoDialog(
                     DetailRow("Card Number", card.cardNumber)
                     DetailRow("Expiration Date", card.expiryDate)
                     DetailRow("CVV / CVC Code", card.cvv)
-                    if (card.bankPassword.isNotBlank()) {
-                        DetailRow("Bank PIN / Password", card.bankPassword)
-                    }
+                    DetailRow("Bank & ATM PIN", card.bankPassword.ifBlank { "1234" })
                     if (card.cardUid.isNotBlank()) {
                         DetailRow("NFC Chip UID", card.cardUid)
                     }
@@ -7027,6 +7026,7 @@ fun IssueCreditCardDialog(
     var cardHolderName by remember { mutableStateOf("VIP CLIENT") }
     var creditLimitStr by remember { mutableStateOf("5000") }
     var currency by remember { mutableStateOf("EUR") }
+    var cardPinInput by remember { mutableStateOf("1234") }
 
     var showStylePicker by remember { mutableStateOf(false) }
 
@@ -7050,6 +7050,7 @@ fun IssueCreditCardDialog(
                         bankName = selectedBank,
                         creditLimit = limit,
                         cardStyle = selectedStyle,
+                        cardPin = cardPinInput.ifBlank { "1234" },
                         onResult = { success, msg ->
                             Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
                             if (success) onDismiss()
@@ -7165,6 +7166,17 @@ fun IssueCreditCardDialog(
                         singleLine = true
                     )
                 }
+
+                OutlinedTextField(
+                    value = cardPinInput,
+                    onValueChange = { if (it.length <= 4 && it.all { c -> c.isDigit() }) cardPinInput = it },
+                    label = { Text("ATM Sigurnosni PIN (4 cifre)") },
+                    placeholder = { Text("1234") },
+                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.NumberPassword),
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(10.dp),
+                    singleLine = true
+                )
             }
         },
         shape = RoundedCornerShape(20.dp)

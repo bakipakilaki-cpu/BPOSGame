@@ -64,13 +64,20 @@ fun AtmScreen(viewModel: BraiPayViewModel) {
     val selectedBankName by viewModel.selectedBankName.collectAsState()
 
     // Active Card in ATM (defaults to connected bank card or first card)
-    var selectedCardId by remember {
-        mutableStateOf(connectedCardId ?: cards.firstOrNull()?.id ?: 0)
+    val initialCardId = if (connectedCardId > 0 && cards.any { it.id == connectedCardId }) {
+        connectedCardId
+    } else {
+        cards.firstOrNull()?.id ?: 0
     }
+    var selectedCardId by remember { mutableStateOf(initialCardId) }
 
     LaunchedEffect(cards, connectedCardId) {
-        if (selectedCardId == 0 && cards.isNotEmpty()) {
-            selectedCardId = connectedCardId ?: cards.first().id
+        if ((selectedCardId <= 0 || cards.none { it.id == selectedCardId }) && cards.isNotEmpty()) {
+            selectedCardId = if (connectedCardId > 0 && cards.any { it.id == connectedCardId }) {
+                connectedCardId
+            } else {
+                cards.first().id
+            }
         }
     }
 
@@ -422,19 +429,59 @@ fun AtmScreen(viewModel: BraiPayViewModel) {
             singleLine = true
         )
 
-        // PIN Code Input (Optional security pad)
-        OutlinedTextField(
-            value = pinInput,
-            onValueChange = { if (it.length <= 4) pinInput = it },
-            label = { Text("PIN Kod kartice (Opciono / CVV)") },
-            placeholder = { Text("Unesite 4-cifreni PIN") },
-            leadingIcon = {
-                Icon(Icons.Rounded.Key, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-            },
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(12.dp),
-            singleLine = true
-        )
+        // PIN Code Input (Mandatory ATM Security PIN)
+        var showPinValue by remember { mutableStateOf(false) }
+        val cardExpectedPin = if (activeCard?.bankPassword?.isNotBlank() == true) activeCard.bankPassword else "1234"
+
+        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "Sigurnosni PIN kartice (4 Cifre):",
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White
+                )
+                Text(
+                    text = if (showPinValue) "PIN: $cardExpectedPin" else "👁️ Prikaži PIN",
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFF38BDF8),
+                    modifier = Modifier.clickable { showPinValue = !showPinValue }
+                )
+            }
+
+            OutlinedTextField(
+                value = pinInput,
+                onValueChange = { input ->
+                    if (input.length <= 4 && input.all { it.isDigit() }) {
+                        pinInput = input
+                    }
+                },
+                label = { Text("Unesite 4-cifreni PIN kartice") },
+                placeholder = { Text("● ● ● ●") },
+                leadingIcon = {
+                    Icon(Icons.Rounded.Lock, contentDescription = null, tint = Color(0xFFFBBF24))
+                },
+                trailingIcon = {
+                    IconButton(onClick = { showPinValue = !showPinValue }) {
+                        Icon(
+                            if (showPinValue) Icons.Rounded.VisibilityOff else Icons.Rounded.Visibility,
+                            contentDescription = "Toggle PIN",
+                            tint = Color.Gray
+                        )
+                    }
+                },
+                visualTransformation = if (showPinValue) androidx.compose.ui.text.input.VisualTransformation.None else androidx.compose.ui.text.input.PasswordVisualTransformation(),
+                keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.NumberPassword),
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp),
+                singleLine = true
+            )
+        }
 
         // Realistic Cash Dispenser Slot Graphic
         Card(
@@ -517,6 +564,11 @@ fun AtmScreen(viewModel: BraiPayViewModel) {
                     Toast.makeText(context, "Izaberite iznos veći od 0 RSD!", Toast.LENGTH_SHORT).show()
                     return@Button
                 }
+                if (pinInput.length < 4) {
+                    TerminalSoundPlayer.playErrorBuzzer()
+                    Toast.makeText(context, "Molimo unesite 4-cifreni PIN kod kartice!", Toast.LENGTH_SHORT).show()
+                    return@Button
+                }
 
                 isDispensing = true
                 dispensedSuccessAmount = null
@@ -586,7 +638,9 @@ fun AtmScreen(viewModel: BraiPayViewModel) {
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.background)
             ) {
                 Column(
-                    modifier = Modifier.padding(16.dp),
+                    modifier = Modifier
+                        .padding(16.dp)
+                        .verticalScroll(rememberScrollState()),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     Text(
@@ -603,6 +657,8 @@ fun AtmScreen(viewModel: BraiPayViewModel) {
                                 .fillMaxWidth()
                                 .clickable {
                                     selectedCardId = card.id
+                                    viewModel.setConnectedBankUserCardId(card.id)
+                                    pinInput = ""
                                     showCardSelectorModal = false
                                 },
                             colors = CardDefaults.cardColors(

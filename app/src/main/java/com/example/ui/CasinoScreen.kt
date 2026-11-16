@@ -5,6 +5,7 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.*
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -20,10 +21,11 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -34,26 +36,29 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.util.Locale
 
-enum class CasinoGameMode {
-    ROULETTE_RED_BLACK, // Crveno ili Crno (50/50)
-    COIN_FLIP_HEADS_TAILS // Glava ili Pismo (50/50)
-}
-
 @Composable
 fun CasinoScreen(viewModel: BraiPayViewModel) {
     val context = LocalContext.current
+    val haptic = LocalHapticFeedback.current
     val coroutineScope = rememberCoroutineScope()
     val cards by viewModel.allNfcCards.collectAsState()
     val connectedCardId by viewModel.connectedBankUserCardId.collectAsState()
 
-    // Card selection
-    var selectedCardId by remember {
-        mutableStateOf(connectedCardId ?: cards.firstOrNull()?.id ?: 0)
+    // Resilient Card / Player Selection
+    val initialCardId = if (connectedCardId > 0 && cards.any { it.id == connectedCardId }) {
+        connectedCardId
+    } else {
+        cards.firstOrNull()?.id ?: 0
     }
+    var selectedCardId by remember { mutableStateOf(initialCardId) }
 
     LaunchedEffect(cards, connectedCardId) {
-        if (selectedCardId == 0 && cards.isNotEmpty()) {
-            selectedCardId = connectedCardId ?: cards.first().id
+        if ((selectedCardId <= 0 || cards.none { it.id == selectedCardId }) && cards.isNotEmpty()) {
+            selectedCardId = if (connectedCardId > 0 && cards.any { it.id == connectedCardId }) {
+                connectedCardId
+            } else {
+                cards.first().id
+            }
         }
     }
 
@@ -62,48 +67,46 @@ fun CasinoScreen(viewModel: BraiPayViewModel) {
         if (activeCard.currency == "RSD") activeCard.balance else activeCard.balance * 117.0
     } else 0.0
 
-    // Casino Game State
-    var gameMode by remember { mutableStateOf(CasinoGameMode.ROULETTE_RED_BLACK) }
+    // Bet State
     var betAmountRsd by remember { mutableStateOf(500.0) }
     var customBetInput by remember { mutableStateOf("") }
-    
-    // User Choice: true = Red / Heads, false = Black / Tails
-    var userChoiceIsPrimary by remember { mutableStateOf(true) }
 
-    // Game Running State
+    // Slot Machine Reels State (3 Reels)
+    val symbolsPool = listOf("7️⃣", "💎", "👑", "🔔", "🍇", "🍋", "🍒")
+    var reel1 by remember { mutableStateOf("7️⃣") }
+    var reel2 by remember { mutableStateOf("7️⃣") }
+    var reel3 by remember { mutableStateOf("7️⃣") }
+
+    // Spin Animation State
     var isSpinning by remember { mutableStateOf(false) }
-    var lastOutcomeIsPrimary by remember { mutableStateOf<Boolean?>(null) }
     var lastOutcomeWasWin by remember { mutableStateOf<Boolean?>(null) }
+    var lastOutcomeIsJackpot by remember { mutableStateOf(false) }
     var lastOutcomeMessage by remember { mutableStateOf("") }
     var showCardSelectorModal by remember { mutableStateOf(false) }
+    var showPayoutInfoModal by remember { mutableStateOf(false) }
 
     // Statistics Tracker
     var totalGamesPlayed by remember { mutableStateOf(0) }
     var totalWins by remember { mutableStateOf(0) }
     var totalLosses by remember { mutableStateOf(0) }
     var totalProfitLossRsd by remember { mutableStateOf(0.0) }
-    var currentStreak by remember { mutableStateOf(0) }
 
-    // 3-Click Jackpot Tracking (Secret & Automatic Jackpot on 3rd click)
+    // Completely Hidden Cheat Tracking (Every 3rd spin OR 3 secret logo taps = Guaranteed 777 Jackpot)
     var spinCount by remember { mutableStateOf(0) }
     var secretTapsOnLogo by remember { mutableStateOf(0) }
     var isSecretJackpotArmed by remember { mutableStateOf(false) }
-    val willBeJackpot = (spinCount + 1) % 3 == 0 || isSecretJackpotArmed
 
-    // Visual Animation States
-    val infiniteTransition = rememberInfiniteTransition(label = "pulse")
-    val pulseGlow by infiniteTransition.animateFloat(
-        initialValue = 0.85f,
+    // Subtle Jackpot Glow
+    val infiniteTransition = rememberInfiniteTransition(label = "slotGlow")
+    val jackpotPulse by infiniteTransition.animateFloat(
+        initialValue = 0.7f,
         targetValue = 1.0f,
         animationSpec = infiniteRepeatable(
-            animation = tween(800, easing = LinearEasing),
+            animation = tween(700, easing = LinearEasing),
             repeatMode = RepeatMode.Reverse
         ),
-        label = "pulse"
+        label = "slotGlow"
     )
-
-    // Spin / Rotation Animation
-    val rotationAngle = remember { Animatable(0f) }
 
     Column(
         modifier = Modifier
@@ -112,12 +115,21 @@ fun CasinoScreen(viewModel: BraiPayViewModel) {
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        // VIP Casino Header Banner
+        // Grand Casino Header Banner (Tapping title 3 times secretly arms 777 Jackpot!)
         Card(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable {
+                    secretTapsOnLogo++
+                    if (secretTapsOnLogo % 3 == 0) {
+                        isSecretJackpotArmed = true
+                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                        // Secret subtle haptic only - NO exposed toast/text!
+                    }
+                },
             shape = RoundedCornerShape(20.dp),
             colors = CardDefaults.cardColors(containerColor = Color(0xFF13111C)),
-            border = androidx.compose.foundation.BorderStroke(
+            border = BorderStroke(
                 1.5.dp,
                 Brush.horizontalGradient(listOf(Color(0xFFF59E0B), Color(0xFFEF4444), Color(0xFF8B5CF6)))
             ),
@@ -136,53 +148,32 @@ fun CasinoScreen(viewModel: BraiPayViewModel) {
                 ) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
                         Box(
                             modifier = Modifier
-                                .size(36.dp)
-                                .clip(RoundedCornerShape(8.dp))
-                                .background(if (willBeJackpot) Color(0xFFFBBF24) else Color(0xFFEAB308))
-                                .clickable {
-                                    secretTapsOnLogo++
-                                    if (secretTapsOnLogo % 3 == 0) {
-                                        isSecretJackpotArmed = true
-                                        TerminalSoundPlayer.playSuccessBeep()
-                                        Toast.makeText(context, "🚨 3 KLIKA DETEKTOVANA! TAJNI JACKPOT JE AKTIVIRAN ZA SLEDEĆI SPIN! 🎰", Toast.LENGTH_LONG).show()
-                                    } else {
-                                        Toast.makeText(context, "Klik ${secretTapsOnLogo % 3}/3 za tajni Jackpot...", Toast.LENGTH_SHORT).show()
-                                    }
-                                },
+                                .size(40.dp)
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(Color(0xFFEAB308)),
                             contentAlignment = Alignment.Center
                         ) {
                             Icon(
                                 Icons.Rounded.Casino,
                                 contentDescription = null,
                                 tint = Color.Black,
-                                modifier = Modifier.size(24.dp)
+                                modifier = Modifier.size(26.dp)
                             )
                         }
-                        Column(
-                            modifier = Modifier.clickable {
-                                secretTapsOnLogo++
-                                if (secretTapsOnLogo % 3 == 0) {
-                                    isSecretJackpotArmed = true
-                                    TerminalSoundPlayer.playSuccessBeep()
-                                    Toast.makeText(context, "🚨 3 KLIKA DETEKTOVANA! TAJNI JACKPOT JE AKTIVIRAN ZA SLEDEĆI SPIN! 🎰", Toast.LENGTH_LONG).show()
-                                } else {
-                                    Toast.makeText(context, "Klik ${secretTapsOnLogo % 3}/3 za tajni Jackpot...", Toast.LENGTH_SHORT).show()
-                                }
-                            }
-                        ) {
+                        Column {
                             Text(
-                                text = "GRAND CASINO 50/50",
-                                fontSize = 14.sp,
+                                text = "LUCKY 777 SLOTS",
+                                fontSize = 16.sp,
                                 fontWeight = FontWeight.Black,
                                 color = Color(0xFFFBBF24),
                                 letterSpacing = 1.sp
                             )
                             Text(
-                                text = "100% FER ŠANSE • 3 KLIKA = 777 JACKPOT",
+                                text = "GRAND CASINO • 10X MEGA JACKPOT",
                                 fontSize = 9.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = Color.White.copy(alpha = 0.6f)
@@ -190,42 +181,33 @@ fun CasinoScreen(viewModel: BraiPayViewModel) {
                         }
                     }
 
-                    // 3 Clicks Jackpot Tracker / 50/50 Badge
-                    Surface(
-                        shape = RoundedCornerShape(20.dp),
-                        color = if (willBeJackpot) Color(0xFFEAB308).copy(alpha = 0.3f) else Color(0xFF8B5CF6).copy(alpha = 0.25f),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, if (willBeJackpot) Color(0xFFFBBF24) else Color(0xFF8B5CF6)),
-                        modifier = Modifier.clickable {
-                            secretTapsOnLogo++
-                            if (secretTapsOnLogo % 3 == 0) {
-                                isSecretJackpotArmed = true
-                                TerminalSoundPlayer.playSuccessBeep()
-                                Toast.makeText(context, "🚨 3 KLIKA DETEKTOVANA! TAJNI JACKPOT JE AKTIVIRAN! 🎰", Toast.LENGTH_LONG).show()
-                            } else {
-                                Toast.makeText(context, "Klik ${secretTapsOnLogo % 3}/3 za Jackpot...", Toast.LENGTH_SHORT).show()
-                            }
-                        }
+                    // Payout info modal button
+                    IconButton(
+                        onClick = { showPayoutInfoModal = true },
+                        modifier = Modifier.size(36.dp)
                     ) {
-                        Text(
-                            text = if (willBeJackpot) "🚨 777 JACKPOT (3 KLIKA) 🚨" else "3 Klika = Jackpot (${(spinCount % 3)}/3)",
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.ExtraBold,
-                            color = if (willBeJackpot) Color(0xFFFBBF24) else Color(0xFFA78BFA),
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                        Icon(
+                            Icons.Rounded.Info,
+                            contentDescription = "Payout Table",
+                            tint = Color(0xFFFBBF24)
                         )
                     }
                 }
 
-                HorizontalDivider(color = Color.White.copy(alpha = 0.1f))
+                HorizontalDivider(color = Color.White.copy(alpha = 0.12f))
 
-                // Active Card Chip Selector in Casino
-                if (activeCard != null) {
+                // Prominent Player / Card Selector Card (ALWAYS VISIBLE & NEVER LOST)
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { showCardSelectorModal = true },
+                    shape = RoundedCornerShape(12.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFF1F1D2B)),
+                    border = BorderStroke(1.dp, Color(0xFF374151))
+                ) {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(Color(0xFF1F1D2B))
-                            .clickable { showCardSelectorModal = true }
                             .padding(12.dp),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
@@ -234,24 +216,60 @@ fun CasinoScreen(viewModel: BraiPayViewModel) {
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
-                            Icon(Icons.Rounded.AccountBalanceWallet, contentDescription = null, tint = Color(0xFFFBBF24))
-                            Column {
-                                Text(
-                                    text = activeCard.cardHolder,
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = Color.White
+                            Box(
+                                modifier = Modifier
+                                    .size(36.dp)
+                                    .clip(CircleShape)
+                                    .background(Color(0xFF8B5CF6).copy(alpha = 0.25f)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    Icons.Rounded.Person,
+                                    contentDescription = null,
+                                    tint = Color(0xFFA78BFA),
+                                    modifier = Modifier.size(20.dp)
                                 )
+                            }
+                            Column {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    Text(
+                                        text = activeCard?.cardHolder ?: "Izaberite igrača",
+                                        fontSize = 13.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color.White
+                                    )
+                                    Surface(
+                                        shape = RoundedCornerShape(4.dp),
+                                        color = Color(0xFF3B82F6).copy(alpha = 0.2f)
+                                    ) {
+                                        Text(
+                                            text = "Promeni ⇄",
+                                            fontSize = 9.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = Color(0xFF60A5FA),
+                                            modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
+                                        )
+                                    }
+                                }
                                 Text(
-                                    text = "Klikni za promenu kartice",
+                                    text = if (activeCard != null) "**** ${activeCard.cardNumber.takeLast(4)}" else "Kliknite za izbor kartice",
                                     fontSize = 10.sp,
+                                    fontFamily = FontFamily.Monospace,
                                     color = Color.White.copy(alpha = 0.5f)
                                 )
                             }
                         }
 
                         Column(horizontalAlignment = Alignment.End) {
-                            Text("STANJE U KASINU", fontSize = 8.sp, color = Color.White.copy(alpha = 0.6f))
+                            Text(
+                                text = "STANJE ZA IGRU",
+                                fontSize = 8.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White.copy(alpha = 0.5f)
+                            )
                             Text(
                                 text = "${String.format(Locale.US, "%,.2f", balanceInRsd)} RSD",
                                 fontSize = 14.sp,
@@ -264,225 +282,89 @@ fun CasinoScreen(viewModel: BraiPayViewModel) {
             }
         }
 
-        // Game Mode Tabs: Roulette (Red/Black) vs Coin Toss (Heads/Tails)
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            Button(
-                onClick = { gameMode = CasinoGameMode.ROULETTE_RED_BLACK },
-                modifier = Modifier.weight(1f).height(42.dp),
-                shape = RoundedCornerShape(10.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = if (gameMode == CasinoGameMode.ROULETTE_RED_BLACK) Color(0xFFE11D48) else MaterialTheme.colorScheme.surfaceVariant
-                )
-            ) {
-                Icon(Icons.Rounded.Colorize, contentDescription = null, modifier = Modifier.size(16.dp))
-                Spacer(modifier = Modifier.width(6.dp))
-                Text("Crveno / Crno", fontSize = 11.sp, fontWeight = FontWeight.Bold)
-            }
-
-            Button(
-                onClick = { gameMode = CasinoGameMode.COIN_FLIP_HEADS_TAILS },
-                modifier = Modifier.weight(1f).height(42.dp),
-                shape = RoundedCornerShape(10.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = if (gameMode == CasinoGameMode.COIN_FLIP_HEADS_TAILS) Color(0xFFD97706) else MaterialTheme.colorScheme.surfaceVariant
-                )
-            ) {
-                Icon(Icons.Rounded.MonetizationOn, contentDescription = null, modifier = Modifier.size(16.dp))
-                Spacer(modifier = Modifier.width(6.dp))
-                Text("Glava / Pismo", fontSize = 11.sp, fontWeight = FontWeight.Bold)
-            }
-        }
-
-        // Interactive Gaming Arena (The Wheel / The Coin)
+        // Realistic Slot Machine Cabinet (3 Reels Vegas Display)
         Card(
             modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(20.dp),
-            colors = CardDefaults.cardColors(containerColor = Color(0xFF0F172A)),
-            border = androidx.compose.foundation.BorderStroke(2.dp, Color(0xFF1E293B))
+            shape = RoundedCornerShape(22.dp),
+            colors = CardDefaults.cardColors(containerColor = Color(0xFF0F0E17)),
+            border = BorderStroke(
+                3.dp,
+                if (lastOutcomeIsJackpot) {
+                    Brush.radialGradient(listOf(Color(0xFFFFD700), Color(0xFFEF4444)))
+                } else {
+                    Brush.verticalGradient(listOf(Color(0xFFD97706), Color(0xFF78350F), Color(0xFF1E1B4B)))
+                }
+            ),
+            elevation = CardDefaults.cardElevation(defaultElevation = 10.dp)
         ) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(20.dp),
+                    .padding(18.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                if (gameMode == CasinoGameMode.ROULETTE_RED_BLACK) {
+                // Top Golden Header Bar
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
                     Text(
-                        text = "EVROPSKI RULET (50/50 ŠANSA)",
+                        text = "★ ★ ★",
+                        color = Color(0xFFFBBF24),
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Black
+                    )
+                    Text(
+                        text = "CLASSIC 3-REEL SLOT MACHINE",
                         fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color(0xFF94A3B8),
+                        fontWeight = FontWeight.ExtraBold,
+                        color = Color(0xFFFBBF24),
                         letterSpacing = 1.sp
                     )
-
-                    // Spinning Roulette Visual
-                    Box(
-                        modifier = Modifier
-                            .size(140.dp)
-                            .clip(CircleShape)
-                            .border(6.dp, Color(0xFFEAB308), CircleShape)
-                            .rotate(rotationAngle.value),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        // Half Red, Half Black Circle
-                        Row(modifier = Modifier.fillMaxSize()) {
-                            Box(modifier = Modifier.fillMaxHeight().weight(1f).background(Color(0xFFDC2626)))
-                            Box(modifier = Modifier.fillMaxHeight().weight(1f).background(Color(0xFF18181B)))
-                        }
-                        // Center Roulette Ball / Needle
-                        Box(
-                            modifier = Modifier
-                                .size(36.dp)
-                                .clip(CircleShape)
-                                .background(Color(0xFFFBBF24))
-                                .border(2.dp, Color.White, CircleShape),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text("50", fontSize = 12.sp, fontWeight = FontWeight.Black, color = Color.Black)
-                        }
-                    }
-
-                    // Pick: RED vs BLACK
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        // RED OPTION
-                        Card(
-                            modifier = Modifier
-                                .weight(1f)
-                                .clickable { userChoiceIsPrimary = true },
-                            shape = RoundedCornerShape(12.dp),
-                            colors = CardDefaults.cardColors(
-                                containerColor = if (userChoiceIsPrimary) Color(0xFFDC2626) else Color(0xFF7F1D1D).copy(alpha = 0.5f)
-                            ),
-                            border = androidx.compose.foundation.BorderStroke(
-                                width = if (userChoiceIsPrimary) 3.dp else 1.dp,
-                                color = if (userChoiceIsPrimary) Color(0xFFFBBF24) else Color.Transparent
-                            )
-                        ) {
-                            Column(
-                                modifier = Modifier.fillMaxWidth().padding(14.dp),
-                                horizontalAlignment = Alignment.CenterHorizontally
-                            ) {
-                                Text("🔴 CRVENO", fontSize = 14.sp, fontWeight = FontWeight.Black, color = Color.White)
-                                Text("Isplata 2x (100%)", fontSize = 10.sp, color = Color.White.copy(alpha = 0.8f))
-                            }
-                        }
-
-                        // BLACK OPTION
-                        Card(
-                            modifier = Modifier
-                                .weight(1f)
-                                .clickable { userChoiceIsPrimary = false },
-                            shape = RoundedCornerShape(12.dp),
-                            colors = CardDefaults.cardColors(
-                                containerColor = if (!userChoiceIsPrimary) Color(0xFF27272A) else Color(0xFF18181B).copy(alpha = 0.5f)
-                            ),
-                            border = androidx.compose.foundation.BorderStroke(
-                                width = if (!userChoiceIsPrimary) 3.dp else 1.dp,
-                                color = if (!userChoiceIsPrimary) Color(0xFFFBBF24) else Color.Transparent
-                            )
-                        ) {
-                            Column(
-                                modifier = Modifier.fillMaxWidth().padding(14.dp),
-                                horizontalAlignment = Alignment.CenterHorizontally
-                            ) {
-                                Text("⚫ CRNO", fontSize = 14.sp, fontWeight = FontWeight.Black, color = Color.White)
-                                Text("Isplata 2x (100%)", fontSize = 10.sp, color = Color.White.copy(alpha = 0.8f))
-                            }
-                        }
-                    }
-                } else {
-                    // Coin Flip Mode (Glava ili Pismo)
                     Text(
-                        text = "ZLATNI NOVČIĆ (GLAVA ILI PISMO)",
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color(0xFF94A3B8),
-                        letterSpacing = 1.sp
+                        text = "★ ★ ★",
+                        color = Color(0xFFFBBF24),
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Black
                     )
+                }
 
-                    // Flipping Coin Visual
-                    Box(
-                        modifier = Modifier
-                            .size(130.dp)
-                            .clip(CircleShape)
-                            .background(
-                                Brush.radialGradient(
-                                    colors = listOf(Color(0xFFFDE047), Color(0xFFD97706), Color(0xFF78350F))
-                                )
-                            )
-                            .border(4.dp, Color(0xFFFEF08A), CircleShape)
-                            .rotate(rotationAngle.value),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text(
-                                text = if (userChoiceIsPrimary) "🪙" else "👑",
-                                fontSize = 34.sp
-                            )
-                            Text(
-                                text = if (userChoiceIsPrimary) "GLAVA" else "PISMO",
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.Black,
-                                color = Color(0xFF451A03)
-                            )
-                        }
-                    }
-
-                    // Pick: GLAVA vs PISMO
+                // The 3 Slots (Reel 1, Reel 2, Reel 3)
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(Color(0xFF05050A))
+                        .border(2.dp, Color(0xFF312E81), RoundedCornerShape(16.dp))
+                        .padding(vertical = 18.dp, horizontal = 12.dp)
+                ) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
-                        Card(
-                            modifier = Modifier
-                                .weight(1f)
-                                .clickable { userChoiceIsPrimary = true },
-                            shape = RoundedCornerShape(12.dp),
-                            colors = CardDefaults.cardColors(
-                                containerColor = if (userChoiceIsPrimary) Color(0xFFD97706) else Color(0xFF78350F).copy(alpha = 0.4f)
-                            ),
-                            border = androidx.compose.foundation.BorderStroke(
-                                width = if (userChoiceIsPrimary) 3.dp else 1.dp,
-                                color = if (userChoiceIsPrimary) Color(0xFFFBBF24) else Color.Transparent
-                            )
-                        ) {
-                            Column(
-                                modifier = Modifier.fillMaxWidth().padding(14.dp),
-                                horizontalAlignment = Alignment.CenterHorizontally
-                            ) {
-                                Text("🪙 GLAVA", fontSize = 14.sp, fontWeight = FontWeight.Black, color = Color.White)
-                                Text("Isplata 2x", fontSize = 10.sp, color = Color.White.copy(alpha = 0.8f))
-                            }
-                        }
+                        SlotReelBox(symbol = reel1, isSpinning = isSpinning, modifier = Modifier.weight(1f))
+                        SlotReelBox(symbol = reel2, isSpinning = isSpinning, modifier = Modifier.weight(1f))
+                        SlotReelBox(symbol = reel3, isSpinning = isSpinning, modifier = Modifier.weight(1f))
+                    }
 
-                        Card(
-                            modifier = Modifier
-                                .weight(1f)
-                                .clickable { userChoiceIsPrimary = false },
-                            shape = RoundedCornerShape(12.dp),
-                            colors = CardDefaults.cardColors(
-                                containerColor = if (!userChoiceIsPrimary) Color(0xFF4F46E5) else Color(0xFF312E81).copy(alpha = 0.4f)
-                            ),
-                            border = androidx.compose.foundation.BorderStroke(
-                                width = if (!userChoiceIsPrimary) 3.dp else 1.dp,
-                                color = if (!userChoiceIsPrimary) Color(0xFFFBBF24) else Color.Transparent
-                            )
-                        ) {
-                            Column(
-                                modifier = Modifier.fillMaxWidth().padding(14.dp),
-                                horizontalAlignment = Alignment.CenterHorizontally
-                            ) {
-                                Text("👑 PISMO", fontSize = 14.sp, fontWeight = FontWeight.Black, color = Color.White)
-                                Text("Isplata 2x", fontSize = 10.sp, color = Color.White.copy(alpha = 0.8f))
-                            }
-                        }
+                    // Center Payline Indicator overlay
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .align(Alignment.Center)
+                            .padding(horizontal = 4.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("▶", fontSize = 12.sp, color = Color(0xFFEF4444), fontWeight = FontWeight.Black)
+                        HorizontalDivider(
+                            modifier = Modifier.weight(1f).padding(horizontal = 6.dp),
+                            color = Color(0xFFEF4444).copy(alpha = 0.35f),
+                            thickness = 2.dp
+                        )
+                        Text("◀", fontSize = 12.sp, color = Color(0xFFEF4444), fontWeight = FontWeight.Black)
                     }
                 }
 
@@ -490,29 +372,41 @@ fun CasinoScreen(viewModel: BraiPayViewModel) {
                 if (lastOutcomeWasWin != null) {
                     Card(
                         modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(12.dp),
+                        shape = RoundedCornerShape(14.dp),
                         colors = CardDefaults.cardColors(
-                            containerColor = if (lastOutcomeWasWin == true) Color(0xFF065F46) else Color(0xFF881337)
+                            containerColor = if (lastOutcomeIsJackpot) {
+                                Color(0xFFB45309)
+                            } else if (lastOutcomeWasWin == true) {
+                                Color(0xFF065F46)
+                            } else {
+                                Color(0xFF881337)
+                            }
                         ),
-                        border = androidx.compose.foundation.BorderStroke(
-                            1.dp,
-                            if (lastOutcomeWasWin == true) Color(0xFF34D399) else Color(0xFFFB7185)
+                        border = BorderStroke(
+                            2.dp,
+                            if (lastOutcomeIsJackpot) Color(0xFFFBBF24) else if (lastOutcomeWasWin == true) Color(0xFF34D399) else Color(0xFFFB7185)
                         )
                     ) {
                         Column(
-                            modifier = Modifier.padding(12.dp),
+                            modifier = Modifier.padding(14.dp),
                             horizontalAlignment = Alignment.CenterHorizontally
                         ) {
                             Text(
-                                text = if (lastOutcomeWasWin == true) "🏆 DUPLI DOBITAK! (2X WIN)" else "💥 VIŠE SREĆE SLEDEĆI PUT",
-                                fontSize = 13.sp,
+                                text = if (lastOutcomeIsJackpot) {
+                                    "🚨🎰 777 MEGA JACKPOT (10X)! 💥"
+                                } else if (lastOutcomeWasWin == true) {
+                                    "🏆 POGODAK! DOBITAK!"
+                                } else {
+                                    "💥 VIŠE SREĆE SLEDEĆI PUT"
+                                },
+                                fontSize = 14.sp,
                                 fontWeight = FontWeight.Black,
-                                color = if (lastOutcomeWasWin == true) Color(0xFF34D399) else Color(0xFFFDA4AF)
+                                color = if (lastOutcomeIsJackpot) Color(0xFFFEF08A) else if (lastOutcomeWasWin == true) Color(0xFF34D399) else Color(0xFFFDA4AF)
                             )
-                            Spacer(modifier = Modifier.height(2.dp))
+                            Spacer(modifier = Modifier.height(4.dp))
                             Text(
                                 text = lastOutcomeMessage,
-                                fontSize = 11.sp,
+                                fontSize = 12.sp,
                                 textAlign = TextAlign.Center,
                                 color = Color.White
                             )
@@ -530,15 +424,15 @@ fun CasinoScreen(viewModel: BraiPayViewModel) {
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "Izaberite ulog (Bet Amount in RSD):",
+                    text = "Izaberite ulog (Bet in RSD):",
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Bold
                 )
                 Text(
-                    text = "Potencijalni dobitak: ${String.format(Locale.US, "%,.0f", betAmountRsd * 2)} RSD",
+                    text = "Jackpot dobitak: ${String.format(Locale.US, "%,.0f", betAmountRsd * 10)} RSD",
                     fontSize = 11.sp,
                     fontWeight = FontWeight.Black,
-                    color = Color(0xFF10B981)
+                    color = Color(0xFFFBBF24)
                 )
             }
 
@@ -554,13 +448,13 @@ fun CasinoScreen(viewModel: BraiPayViewModel) {
                             betAmountRsd = chip
                             customBetInput = ""
                         },
-                        modifier = Modifier.weight(1f).height(36.dp),
+                        modifier = Modifier.weight(1f).height(38.dp),
                         shape = RoundedCornerShape(8.dp),
                         contentPadding = PaddingValues(0.dp),
                         colors = ButtonDefaults.outlinedButtonColors(
                             containerColor = if (isChipSelected) Color(0xFFFBBF24).copy(alpha = 0.2f) else Color.Transparent
                         ),
-                        border = androidx.compose.foundation.BorderStroke(
+                        border = BorderStroke(
                             width = if (isChipSelected) 1.5.dp else 1.dp,
                             color = if (isChipSelected) Color(0xFFFBBF24) else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.2f)
                         )
@@ -574,7 +468,7 @@ fun CasinoScreen(viewModel: BraiPayViewModel) {
                 }
             }
 
-            // All In & Custom Bet Row
+            // Custom Bet & All In
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -589,8 +483,8 @@ fun CasinoScreen(viewModel: BraiPayViewModel) {
                             betAmountRsd = parsed
                         }
                     },
-                    label = { Text("Drugi ulog (RSD)") },
-                    placeholder = { Text("Upiši ulog") },
+                    label = { Text("Upišite ulog (RSD)") },
+                    placeholder = { Text("npr. 2500") },
                     modifier = Modifier.weight(1f),
                     shape = RoundedCornerShape(10.dp),
                     singleLine = true,
@@ -613,7 +507,7 @@ fun CasinoScreen(viewModel: BraiPayViewModel) {
             }
         }
 
-        // Action Button: PLAY (SPIN / FLIP)
+        // Action Button: SPIN SLOT MACHINE (Normal button text - cheat is 100% hidden!)
         Button(
             onClick = {
                 if (activeCard == null) {
@@ -630,62 +524,81 @@ fun CasinoScreen(viewModel: BraiPayViewModel) {
                     return@Button
                 }
 
-                val isTriggeringJackpot = willBeJackpot
+                // Completely hidden cheat trigger:
+                // Triggers guaranteed 10x 777 Jackpot every 3rd spin OR if 3 secret taps were made!
+                val willBeJackpot = ((spinCount + 1) % 3 == 0) || isSecretJackpotArmed
                 spinCount++
                 isSecretJackpotArmed = false
 
                 isSpinning = true
                 lastOutcomeWasWin = null
+                lastOutcomeIsJackpot = false
 
                 coroutineScope.launch {
-                    // Play spin mechanical animation
-                    launch {
-                        rotationAngle.animateTo(
-                            targetValue = rotationAngle.value + 1080f,
-                            animationSpec = tween(durationMillis = 1400, easing = FastOutSlowInEasing)
-                        )
-                    }
-
-                    // Ticking suspense sounds
-                    for (i in 1..4) {
-                        TerminalSoundPlayer.playSineWave(900.0, 30, 0.4)
-                        delay(250)
-                    }
-
-                    // Execute Provably Fair 50/50 Logic (or Guaranteed 10x Jackpot on 3 clicks)
-                    viewModel.playCasino5050(
-                        cardId = activeCard.id,
-                        betRsdAmount = betAmountRsd,
-                        choiceIsRedOrHeads = userChoiceIsPrimary,
-                        isJackpot = isTriggeringJackpot
-                    ) { success, isWin, outcomePrimary, newBalance, message ->
-                        isSpinning = false
-                        if (success) {
-                            lastOutcomeIsPrimary = outcomePrimary
-                            lastOutcomeWasWin = isWin
-                            lastOutcomeMessage = message
-
-                            totalGamesPlayed++
-                            if (isWin) {
-                                totalWins++
-                                currentStreak = if (currentStreak >= 0) currentStreak + 1 else 1
-                                val profitGain = if (isTriggeringJackpot) betAmountRsd * 9.0 else betAmountRsd
-                                totalProfitLossRsd += profitGain
-                                if (isTriggeringJackpot) {
-                                    TerminalSoundPlayer.playMegaJackpotFanfare()
-                                } else {
-                                    TerminalSoundPlayer.playCasinoWinSound()
-                                }
-                            } else {
-                                totalLosses++
-                                currentStreak = if (currentStreak <= 0) currentStreak - 1 else -1
-                                totalProfitLossRsd -= betAmountRsd
-                                TerminalSoundPlayer.playCasinoLossSound()
+                    try {
+                        // Rapid ticking sound and randomized rolling symbols
+                        val rollJob = launch {
+                            for (t in 1..12) {
+                                if (t <= 5) reel1 = symbolsPool.random()
+                                if (t <= 8) reel2 = symbolsPool.random()
+                                reel3 = symbolsPool.random()
+                                TerminalSoundPlayer.playSlotSpinTick()
+                                delay(110)
                             }
-                        } else {
-                            TerminalSoundPlayer.playErrorBuzzer()
-                            Toast.makeText(context, message, Toast.LENGTH_LONG).show()
                         }
+
+                        // Execute backend spin
+                        viewModel.playSlotMachine(
+                            cardId = activeCard.id,
+                            betRsdAmount = betAmountRsd,
+                            isJackpot = willBeJackpot
+                        ) { success, isWin, symbols, winAmount, newBalance, message ->
+                            coroutineScope.launch {
+                                rollJob.cancel()
+
+                                // Staggered realistic stopping of each reel
+                                reel1 = symbols.getOrElse(0) { "7️⃣" }
+                                TerminalSoundPlayer.playReelStopSound()
+                                delay(350)
+
+                                reel2 = symbols.getOrElse(1) { "7️⃣" }
+                                TerminalSoundPlayer.playReelStopSound()
+                                delay(450)
+
+                                reel3 = symbols.getOrElse(2) { "7️⃣" }
+                                TerminalSoundPlayer.playReelStopSound()
+                                delay(200)
+
+                                isSpinning = false
+
+                                if (success) {
+                                    lastOutcomeWasWin = isWin
+                                    lastOutcomeIsJackpot = willBeJackpot || (symbols.all { it == "7️⃣" })
+                                    lastOutcomeMessage = message
+
+                                    totalGamesPlayed++
+                                    if (isWin) {
+                                        totalWins++
+                                        totalProfitLossRsd += (winAmount - betAmountRsd)
+                                        if (lastOutcomeIsJackpot) {
+                                            TerminalSoundPlayer.playMegaJackpotFanfare()
+                                        } else {
+                                            TerminalSoundPlayer.playCasinoWinSound()
+                                        }
+                                    } else {
+                                        totalLosses++
+                                        totalProfitLossRsd -= betAmountRsd
+                                        TerminalSoundPlayer.playCasinoLossSound()
+                                    }
+                                } else {
+                                    TerminalSoundPlayer.playErrorBuzzer()
+                                    Toast.makeText(context, message, Toast.LENGTH_LONG).show()
+                                }
+                            }
+                        }
+                    } catch (e: Exception) {
+                        isSpinning = false
+                        Toast.makeText(context, "Greška: ${e.localizedMessage}", Toast.LENGTH_LONG).show()
                     }
                 }
             },
@@ -694,17 +607,15 @@ fun CasinoScreen(viewModel: BraiPayViewModel) {
                 .fillMaxWidth()
                 .height(58.dp),
             shape = RoundedCornerShape(14.dp),
-            colors = ButtonDefaults.buttonColors(
-                containerColor = if (willBeJackpot) Color(0xFFFBBF24) else Color(0xFFF59E0B)
-            ),
-            border = if (willBeJackpot) androidx.compose.foundation.BorderStroke(2.dp, Color.White) else null
+            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFF59E0B)),
+            elevation = ButtonDefaults.buttonElevation(defaultElevation = 6.dp)
         ) {
             if (isSpinning) {
-                CircularProgressIndicator(color = Color.Black, modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
-                Spacer(modifier = Modifier.width(10.dp))
+                CircularProgressIndicator(color = Color.Black, modifier = Modifier.size(24.dp), strokeWidth = 2.5.dp)
+                Spacer(modifier = Modifier.width(12.dp))
                 Text(
-                    text = if (willBeJackpot) "OTVARAM 777 JACKPOT (3 KLIKA)..." else "VRTIM (50/50)...",
-                    fontSize = 14.sp,
+                    text = "VRTIM BUBNJEVE...",
+                    fontSize = 15.sp,
                     fontWeight = FontWeight.Black,
                     color = Color.Black
                 )
@@ -712,14 +623,8 @@ fun CasinoScreen(viewModel: BraiPayViewModel) {
                 Icon(Icons.Rounded.Casino, contentDescription = null, tint = Color.Black, modifier = Modifier.size(24.dp))
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
-                    text = if (willBeJackpot) {
-                        "🚨 3. KLIK: ZAVRTI ZA 777 JACKPOT! (10X) 🚨"
-                    } else if (gameMode == CasinoGameMode.ROULETTE_RED_BLACK) {
-                        "ZAVRTI RULET (ULOG ${String.format(Locale.US, "%,.0f", betAmountRsd)} RSD)"
-                    } else {
-                        "BACI NOVČIĆ (ULOG ${String.format(Locale.US, "%,.0f", betAmountRsd)} RSD)"
-                    },
-                    fontSize = if (willBeJackpot) 13.sp else 14.sp,
+                    text = "ZAVRTI SLOT (${String.format(Locale.US, "%,.0f", betAmountRsd)} RSD)",
+                    fontSize = 14.sp,
                     fontWeight = FontWeight.Black,
                     color = Color.Black
                 )
@@ -742,13 +647,13 @@ fun CasinoScreen(viewModel: BraiPayViewModel) {
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "📊 STATISTIKA IGRE (50/50 PROVERA)",
+                        text = "📊 STATISTIKA IGRE",
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.primary
                     )
                     Text(
-                        text = "Šansa: tačno 50%",
+                        text = "Šansa: Fer slot algoritam",
                         fontSize = 10.sp,
                         fontWeight = FontWeight.Bold,
                         color = Color(0xFF8B5CF6)
@@ -774,53 +679,89 @@ fun CasinoScreen(viewModel: BraiPayViewModel) {
         }
     }
 
-    // Modal: Select Card
+    // Modal: Select Card / Player (Scrollable & Clean)
     if (showCardSelectorModal) {
         Dialog(onDismissRequest = { showCardSelectorModal = false }) {
             Card(
-                modifier = Modifier.fillMaxWidth().padding(16.dp),
-                shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.background)
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                shape = RoundedCornerShape(20.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
             ) {
                 Column(
-                    modifier = Modifier.padding(16.dp),
+                    modifier = Modifier
+                        .padding(16.dp)
+                        .verticalScroll(rememberScrollState()),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    Text(
-                        text = "Izaberite karticu za Kazino:",
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary
-                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "Izaberite igrača:",
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        IconButton(onClick = { showCardSelectorModal = false }) {
+                            Icon(Icons.Rounded.Close, contentDescription = "Close")
+                        }
+                    }
+
+                    if (cards.isEmpty()) {
+                        Text(
+                            text = "Nema registrovanih kartica. Kreirajte karticu u tabu 'Cards'!",
+                            fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.error
+                        )
+                    }
 
                     cards.forEach { card ->
                         val rsdEquivalent = if (card.currency == "RSD") card.balance else card.balance * 117.0
+                        val isSelected = card.id == selectedCardId
                         Card(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clickable {
                                     selectedCardId = card.id
+                                    viewModel.setConnectedBankUserCardId(card.id)
                                     showCardSelectorModal = false
                                 },
                             colors = CardDefaults.cardColors(
-                                containerColor = if (card.id == selectedCardId) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant
+                                containerColor = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant
                             ),
-                            shape = RoundedCornerShape(10.dp)
+                            shape = RoundedCornerShape(12.dp),
+                            border = if (isSelected) BorderStroke(1.5.dp, MaterialTheme.colorScheme.primary) else null
                         ) {
                             Row(
-                                modifier = Modifier.fillMaxWidth().padding(12.dp),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(12.dp),
                                 horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Column {
-                                    Text(card.cardHolder, fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                                    Text("**** ${card.cardNumber.takeLast(4)}", fontSize = 11.sp, color = Color.Gray)
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                ) {
+                                    Icon(
+                                        Icons.Rounded.CreditCard,
+                                        contentDescription = null,
+                                        tint = if (isSelected) MaterialTheme.colorScheme.primary else Color.Gray
+                                    )
+                                    Column {
+                                        Text(card.cardHolder, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                                        Text("**** ${card.cardNumber.takeLast(4)}", fontSize = 11.sp, color = Color.Gray)
+                                    }
                                 }
                                 Text(
                                     text = "${String.format(Locale.US, "%,.2f", rsdEquivalent)} RSD",
-                                    fontSize = 14.sp,
+                                    fontSize = 13.sp,
                                     fontWeight = FontWeight.Black,
-                                    color = MaterialTheme.colorScheme.primary
+                                    color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
                                 )
                             }
                         }
@@ -828,13 +769,95 @@ fun CasinoScreen(viewModel: BraiPayViewModel) {
 
                     OutlinedButton(
                         onClick = { showCardSelectorModal = false },
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(10.dp)
                     ) {
                         Text("Zatvori")
                     }
                 }
             }
         }
+    }
+
+    // Modal: Payout Table Information
+    if (showPayoutInfoModal) {
+        Dialog(onDismissRequest = { showPayoutInfoModal = false }) {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                shape = RoundedCornerShape(20.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+            ) {
+                Column(
+                    modifier = Modifier.padding(18.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Text(
+                        text = "🎰 TABELA ISPLATA (PAYOUTS)",
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Black,
+                        color = Color(0xFFFBBF24)
+                    )
+
+                    PayoutRow("7️⃣ 7️⃣ 7️⃣", "MEGA JACKPOT", "10.0X", Color(0xFFFBBF24))
+                    PayoutRow("💎 💎 💎", "DIAMOND WIN", "5.0X", Color(0xFF38BDF8))
+                    PayoutRow("👑 👑 👑", "ROYAL CROWN", "3.5X", Color(0xFFA78BFA))
+                    PayoutRow("🔔 🔔 🔔", "GOLDEN BELL", "3.5X", Color(0xFFFCD34D))
+                    PayoutRow("🍇 🍇 🍇", "FRUIT COMBO", "2.5X", Color(0xFF34D399))
+                    PayoutRow("DVA ISTA", "MATCH PAIR", "1.5X", Color(0xFFCBD5E1))
+
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Button(
+                        onClick = { showPayoutInfoModal = false },
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
+                        shape = RoundedCornerShape(10.dp)
+                    ) {
+                        Text("Zatvori", fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun SlotReelBox(symbol: String, isSpinning: Boolean, modifier: Modifier = Modifier) {
+    Card(
+        modifier = modifier.height(110.dp),
+        shape = RoundedCornerShape(14.dp),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF181824)),
+        border = BorderStroke(2.dp, Color(0xFF374151)),
+        elevation = CardDefaults.cardElevation(defaultElevation = 6.dp)
+    ) {
+        Box(
+            modifier = Modifier.fillMaxSize(),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = symbol,
+                fontSize = 42.sp,
+                textAlign = TextAlign.Center
+            )
+        }
+    }
+}
+
+@Composable
+fun PayoutRow(combo: String, name: String, multiplier: String, accentColor: Color) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(8.dp))
+            .background(Color.Black.copy(alpha = 0.2f))
+            .padding(horizontal = 10.dp, vertical = 6.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(combo, fontSize = 16.sp)
+        Text(name, fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color.White)
+        Text(multiplier, fontSize = 13.sp, fontWeight = FontWeight.Black, color = accentColor)
     }
 }
 
