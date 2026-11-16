@@ -133,4 +133,16 @@ object TerminalSoundPlayer {
             playSineWave(330.0, 180, 0.6)
         }.start()
     }
+
+    // Mega Jackpot Fanfare (Rich ascending arpeggio)
+    fun playMegaJackpotFanfare() {
+        Thread {
+            val notes = listOf(523.25, 659.25, 783.99, 1046.50, 1318.51, 1567.98, 2093.00)
+            for (note in notes) {
+                playSineWave(note, 75, 0.75)
+                Thread.sleep(70)
+            }
+            playSineWave(2093.00, 350, 0.9)
+        }.start()
+    }
 }

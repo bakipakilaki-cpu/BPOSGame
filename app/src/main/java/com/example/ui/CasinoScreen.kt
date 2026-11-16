@@ -84,6 +84,12 @@ fun CasinoScreen(viewModel: BraiPayViewModel) {
     var totalProfitLossRsd by remember { mutableStateOf(0.0) }
     var currentStreak by remember { mutableStateOf(0) }
 
+    // 3-Click Jackpot Tracking (Secret & Automatic Jackpot on 3rd click)
+    var spinCount by remember { mutableStateOf(0) }
+    var secretTapsOnLogo by remember { mutableStateOf(0) }
+    var isSecretJackpotArmed by remember { mutableStateOf(false) }
+    val willBeJackpot = (spinCount + 1) % 3 == 0 || isSecretJackpotArmed
+
     // Visual Animation States
     val infiniteTransition = rememberInfiniteTransition(label = "pulse")
     val pulseGlow by infiniteTransition.animateFloat(
@@ -136,7 +142,17 @@ fun CasinoScreen(viewModel: BraiPayViewModel) {
                             modifier = Modifier
                                 .size(36.dp)
                                 .clip(RoundedCornerShape(8.dp))
-                                .background(Color(0xFFEAB308)),
+                                .background(if (willBeJackpot) Color(0xFFFBBF24) else Color(0xFFEAB308))
+                                .clickable {
+                                    secretTapsOnLogo++
+                                    if (secretTapsOnLogo % 3 == 0) {
+                                        isSecretJackpotArmed = true
+                                        TerminalSoundPlayer.playSuccessBeep()
+                                        Toast.makeText(context, "🚨 3 KLIKA DETEKTOVANA! TAJNI JACKPOT JE AKTIVIRAN ZA SLEDEĆI SPIN! 🎰", Toast.LENGTH_LONG).show()
+                                    } else {
+                                        Toast.makeText(context, "Klik ${secretTapsOnLogo % 3}/3 za tajni Jackpot...", Toast.LENGTH_SHORT).show()
+                                    }
+                                },
                             contentAlignment = Alignment.Center
                         ) {
                             Icon(
@@ -146,7 +162,18 @@ fun CasinoScreen(viewModel: BraiPayViewModel) {
                                 modifier = Modifier.size(24.dp)
                             )
                         }
-                        Column {
+                        Column(
+                            modifier = Modifier.clickable {
+                                secretTapsOnLogo++
+                                if (secretTapsOnLogo % 3 == 0) {
+                                    isSecretJackpotArmed = true
+                                    TerminalSoundPlayer.playSuccessBeep()
+                                    Toast.makeText(context, "🚨 3 KLIKA DETEKTOVANA! TAJNI JACKPOT JE AKTIVIRAN ZA SLEDEĆI SPIN! 🎰", Toast.LENGTH_LONG).show()
+                                } else {
+                                    Toast.makeText(context, "Klik ${secretTapsOnLogo % 3}/3 za tajni Jackpot...", Toast.LENGTH_SHORT).show()
+                                }
+                            }
+                        ) {
                             Text(
                                 text = "GRAND CASINO 50/50",
                                 fontSize = 14.sp,
@@ -155,7 +182,7 @@ fun CasinoScreen(viewModel: BraiPayViewModel) {
                                 letterSpacing = 1.sp
                             )
                             Text(
-                                text = "100% FER ŠANSE • DOUBLE OR NOTHING",
+                                text = "100% FER ŠANSE • 3 KLIKA = 777 JACKPOT",
                                 fontSize = 9.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = Color.White.copy(alpha = 0.6f)
@@ -163,18 +190,28 @@ fun CasinoScreen(viewModel: BraiPayViewModel) {
                         }
                     }
 
-                    // 50/50 Provably Fair Badge
+                    // 3 Clicks Jackpot Tracker / 50/50 Badge
                     Surface(
                         shape = RoundedCornerShape(20.dp),
-                        color = Color(0xFF8B5CF6).copy(alpha = 0.25f),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF8B5CF6))
+                        color = if (willBeJackpot) Color(0xFFEAB308).copy(alpha = 0.3f) else Color(0xFF8B5CF6).copy(alpha = 0.25f),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, if (willBeJackpot) Color(0xFFFBBF24) else Color(0xFF8B5CF6)),
+                        modifier = Modifier.clickable {
+                            secretTapsOnLogo++
+                            if (secretTapsOnLogo % 3 == 0) {
+                                isSecretJackpotArmed = true
+                                TerminalSoundPlayer.playSuccessBeep()
+                                Toast.makeText(context, "🚨 3 KLIKA DETEKTOVANA! TAJNI JACKPOT JE AKTIVIRAN! 🎰", Toast.LENGTH_LONG).show()
+                            } else {
+                                Toast.makeText(context, "Klik ${secretTapsOnLogo % 3}/3 za Jackpot...", Toast.LENGTH_SHORT).show()
+                            }
+                        }
                     ) {
                         Text(
-                            text = "50% : 50%",
-                            fontSize = 11.sp,
+                            text = if (willBeJackpot) "🚨 777 JACKPOT (3 KLIKA) 🚨" else "3 Klika = Jackpot (${(spinCount % 3)}/3)",
+                            fontSize = 10.sp,
                             fontWeight = FontWeight.ExtraBold,
-                            color = Color(0xFFA78BFA),
-                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                            color = if (willBeJackpot) Color(0xFFFBBF24) else Color(0xFFA78BFA),
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
                         )
                     }
                 }
@@ -593,6 +630,10 @@ fun CasinoScreen(viewModel: BraiPayViewModel) {
                     return@Button
                 }
 
+                val isTriggeringJackpot = willBeJackpot
+                spinCount++
+                isSecretJackpotArmed = false
+
                 isSpinning = true
                 lastOutcomeWasWin = null
 
@@ -611,11 +652,12 @@ fun CasinoScreen(viewModel: BraiPayViewModel) {
                         delay(250)
                     }
 
-                    // Execute Provably Fair 50/50 Logic
+                    // Execute Provably Fair 50/50 Logic (or Guaranteed 10x Jackpot on 3 clicks)
                     viewModel.playCasino5050(
                         cardId = activeCard.id,
                         betRsdAmount = betAmountRsd,
-                        choiceIsRedOrHeads = userChoiceIsPrimary
+                        choiceIsRedOrHeads = userChoiceIsPrimary,
+                        isJackpot = isTriggeringJackpot
                     ) { success, isWin, outcomePrimary, newBalance, message ->
                         isSpinning = false
                         if (success) {
@@ -627,8 +669,13 @@ fun CasinoScreen(viewModel: BraiPayViewModel) {
                             if (isWin) {
                                 totalWins++
                                 currentStreak = if (currentStreak >= 0) currentStreak + 1 else 1
-                                totalProfitLossRsd += betAmountRsd
-                                TerminalSoundPlayer.playCasinoWinSound()
+                                val profitGain = if (isTriggeringJackpot) betAmountRsd * 9.0 else betAmountRsd
+                                totalProfitLossRsd += profitGain
+                                if (isTriggeringJackpot) {
+                                    TerminalSoundPlayer.playMegaJackpotFanfare()
+                                } else {
+                                    TerminalSoundPlayer.playCasinoWinSound()
+                                }
                             } else {
                                 totalLosses++
                                 currentStreak = if (currentStreak <= 0) currentStreak - 1 else -1
@@ -645,26 +692,34 @@ fun CasinoScreen(viewModel: BraiPayViewModel) {
             enabled = !isSpinning && activeCard != null && betAmountRsd > 0,
             modifier = Modifier
                 .fillMaxWidth()
-                .height(56.dp),
+                .height(58.dp),
             shape = RoundedCornerShape(14.dp),
             colors = ButtonDefaults.buttonColors(
-                containerColor = Color(0xFFF59E0B) // Gold Casino Play
-            )
+                containerColor = if (willBeJackpot) Color(0xFFFBBF24) else Color(0xFFF59E0B)
+            ),
+            border = if (willBeJackpot) androidx.compose.foundation.BorderStroke(2.dp, Color.White) else null
         ) {
             if (isSpinning) {
                 CircularProgressIndicator(color = Color.Black, modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
                 Spacer(modifier = Modifier.width(10.dp))
-                Text("VRTIM (50/50)...", fontSize = 15.sp, fontWeight = FontWeight.Black, color = Color.Black)
+                Text(
+                    text = if (willBeJackpot) "OTVARAM 777 JACKPOT (3 KLIKA)..." else "VRTIM (50/50)...",
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Black,
+                    color = Color.Black
+                )
             } else {
                 Icon(Icons.Rounded.Casino, contentDescription = null, tint = Color.Black, modifier = Modifier.size(24.dp))
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
-                    text = if (gameMode == CasinoGameMode.ROULETTE_RED_BLACK) {
+                    text = if (willBeJackpot) {
+                        "🚨 3. KLIK: ZAVRTI ZA 777 JACKPOT! (10X) 🚨"
+                    } else if (gameMode == CasinoGameMode.ROULETTE_RED_BLACK) {
                         "ZAVRTI RULET (ULOG ${String.format(Locale.US, "%,.0f", betAmountRsd)} RSD)"
                     } else {
                         "BACI NOVČIĆ (ULOG ${String.format(Locale.US, "%,.0f", betAmountRsd)} RSD)"
                     },
-                    fontSize = 14.sp,
+                    fontSize = if (willBeJackpot) 13.sp else 14.sp,
                     fontWeight = FontWeight.Black,
                     color = Color.Black
                 )

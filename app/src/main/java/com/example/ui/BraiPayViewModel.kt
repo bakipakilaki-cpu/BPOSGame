@@ -1847,11 +1847,12 @@ class BraiPayViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
-    // Casino 50/50 Bet (Double or Nothing)
+    // Casino 50/50 Bet (Double or Nothing) + Secret 3-Click 777 Jackpot
     fun playCasino5050(
         cardId: Int,
         betRsdAmount: Double,
         choiceIsRedOrHeads: Boolean,
+        isJackpot: Boolean = false,
         onResult: (Boolean, Boolean, Boolean, Double, String) -> Unit
     ) {
         viewModelScope.launch {
@@ -1878,13 +1879,16 @@ class BraiPayViewModel(application: Application) : AndroidViewModel(application)
                 return@launch
             }
 
-            // Provably fair exact 50/50 probability
-            val outcomeIsRedOrHeads = kotlin.random.Random.nextBoolean()
+            // Provably fair exact 50/50 probability, OR Guaranteed Win on Jackpot (3 clicks)
+            val outcomeIsRedOrHeads = if (isJackpot) choiceIsRedOrHeads else kotlin.random.Random.nextBoolean()
             val isWin = (choiceIsRedOrHeads == outcomeIsRedOrHeads)
 
+            val multiplier = if (isJackpot) 10.0 else 2.0
+            val profitMultiplier = multiplier - 1.0
+
             val newBalance = if (isWin) {
-                // Player wins double their bet (net profit +1x bet)
-                card.balance + betInCardCurrency
+                // Player wins bet * multiplier
+                card.balance + (betInCardCurrency * profitMultiplier)
             } else {
                 // Player loses bet
                 (card.balance - betInCardCurrency).coerceAtLeast(0.0)
@@ -1895,22 +1899,27 @@ class BraiPayViewModel(application: Application) : AndroidViewModel(application)
 
             val remainingRsd = if (updatedCard.currency == "RSD") updatedCard.balance else updatedCard.balance * 117.0
 
+            val winAmount = if (isWin) betRsdAmount * multiplier else 0.0
+
             val tx = TransactionHistory(
-                productName = if (isWin) {
+                productName = if (isJackpot) {
+                    "🎰 777 MEGA JACKPOT (${multiplier.toInt()}X: +${String.format(java.util.Locale.US, "%.0f", winAmount)} RSD)"
+                } else if (isWin) {
                     "Casino 50/50 DOBITAK (+${String.format(java.util.Locale.US, "%.0f", betRsdAmount)} RSD)"
                 } else {
                     "Casino 50/50 Gubitak (-${String.format(java.util.Locale.US, "%.0f", betRsdAmount)} RSD)"
                 },
-                amount = betRsdAmount,
+                amount = if (isWin) winAmount else betRsdAmount,
                 currency = "RSD",
                 status = "APPROVED",
-                paymentMethod = "Casino 50/50",
+                paymentMethod = if (isJackpot) "Casino 777 JACKPOT (3 Clicks)" else "Casino 50/50",
                 transactionId = "CASINO-${System.currentTimeMillis()}"
             )
             repository.insertTransaction(tx)
 
-            val winAmount = if (isWin) betRsdAmount * 2.0 else 0.0
-            val message = if (isWin) {
+            val message = if (isJackpot) {
+                "🚨🎰 777 MEGA JACKPOT! 💥 POGODAK! 3 KLIKA SU DONELA JACKPOT! Osvojili ste neverovatnih ${String.format(java.util.Locale.US, "%.0f", winAmount)} RSD (${multiplier.toInt()}X)!"
+            } else if (isWin) {
                 "🎉 ČESTITAMO! POGODAK! Osvojili ste ${String.format(java.util.Locale.US, "%.0f", winAmount)} RSD!"
             } else {
                 "Više sreće sledeći put! Izgubili ste ${String.format(java.util.Locale.US, "%.0f", betRsdAmount)} RSD."
