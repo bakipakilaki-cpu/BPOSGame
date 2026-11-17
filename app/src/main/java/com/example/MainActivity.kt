@@ -675,6 +675,9 @@ fun BraiPayAppContent(
             },
             onVerifyOtp = { otpCode ->
                 viewModel.verifyOnlineOtp(otpCode)
+            },
+            onSubmitPin = { card, pin ->
+                viewModel.submitCardPinPayment(card, pin)
             }
         )
     }
@@ -5247,7 +5250,8 @@ fun CheckoutOverlay(
     onSimulateTap: (Boolean) -> Unit,
     onSimulateCardTap: (com.example.data.GameNfcCard) -> Unit,
     onPayOnline: (cardHolder: String, cardNumber: String, expiry: String, cvv: String) -> Unit = { _, _, _, _ -> },
-    onVerifyOtp: (String) -> Unit = {}
+    onVerifyOtp: (String) -> Unit = {},
+    onSubmitPin: (card: com.example.data.GameNfcCard, pin: String) -> Unit = { _, _ -> }
 ) {
     val haptic = LocalHapticFeedback.current
     val context = LocalContext.current
@@ -5937,6 +5941,175 @@ fun CheckoutOverlay(
                                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
                                     fontWeight = FontWeight.SemiBold
                                 )
+                            }
+                        }
+
+                        is CheckoutState.PinRequired -> {
+                            val card = state.card
+                            val amountInRsd = state.amountInRsd
+                            var enteredPin by remember { mutableStateOf("") }
+                            var showPinValue by remember { mutableStateOf(false) }
+                            val expectedPin = if (card.bankPassword.isNotBlank()) card.bankPassword else "1234"
+
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                modifier = Modifier.weight(1f),
+                                verticalArrangement = Arrangement.Center
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(54.dp)
+                                        .clip(CircleShape)
+                                        .background(Color(0xFFFBBF24).copy(alpha = 0.2f)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Rounded.Lock,
+                                        contentDescription = "PIN Required",
+                                        tint = Color(0xFFF59E0B),
+                                        modifier = Modifier.size(30.dp)
+                                    )
+                                }
+
+                                Spacer(modifier = Modifier.height(8.dp))
+
+                                Text(
+                                    text = "UNESITE PIN KARTICE",
+                                    fontSize = 16.sp,
+                                    fontWeight = FontWeight.Black,
+                                    color = Color(0xFFF59E0B),
+                                    letterSpacing = 1.sp
+                                )
+
+                                Spacer(modifier = Modifier.height(2.dp))
+
+                                Text(
+                                    text = "Iznos je veći od 2.000 RSD: ${String.format(Locale.US, "%,.2f", amountInRsd)} RSD",
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.85f)
+                                )
+
+                                Text(
+                                    text = "Korisnik: ${card.cardHolder} (**** ${card.cardNumber.takeLast(4)})",
+                                    fontSize = 11.sp,
+                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                                )
+
+                                Spacer(modifier = Modifier.height(12.dp))
+
+                                // Visual PIN Dots (● ● ● ●)
+                                Row(
+                                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    for (i in 0 until 4) {
+                                        val isFilled = i < enteredPin.length
+                                        Box(
+                                            modifier = Modifier
+                                                .size(18.dp)
+                                                .clip(CircleShape)
+                                                .background(
+                                                    if (isFilled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant
+                                                )
+                                                .border(
+                                                    1.5.dp,
+                                                    if (isFilled) MaterialTheme.colorScheme.primary else Color.Gray.copy(alpha = 0.4f),
+                                                    CircleShape
+                                                )
+                                        )
+                                    }
+                                }
+
+                                Spacer(modifier = Modifier.height(14.dp))
+
+                                // Realistic POS Pin Keypad
+                                Column(
+                                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    modifier = Modifier.fillMaxWidth(0.85f)
+                                ) {
+                                    val rows = listOf(
+                                        listOf("1", "2", "3"),
+                                        listOf("4", "5", "6"),
+                                        listOf("7", "8", "9"),
+                                        listOf("C", "0", "OK")
+                                    )
+                                    rows.forEach { row ->
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                        ) {
+                                            row.forEach { key ->
+                                                Button(
+                                                    onClick = {
+                                                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                                        when (key) {
+                                                            "C" -> {
+                                                                if (enteredPin.isNotEmpty()) {
+                                                                    enteredPin = enteredPin.dropLast(1)
+                                                                }
+                                                            }
+                                                            "OK" -> {
+                                                                if (enteredPin.length == 4) {
+                                                                    onSubmitPin(card, enteredPin)
+                                                                }
+                                                            }
+                                                            else -> {
+                                                                if (enteredPin.length < 4) {
+                                                                    enteredPin += key
+                                                                    TerminalSoundPlayer.playSineWave(1200.0, 25, 0.4)
+                                                                    if (enteredPin.length == 4) {
+                                                                        onSubmitPin(card, enteredPin)
+                                                                    }
+                                                                }
+                                                            }
+                                                        }
+                                                    },
+                                                    modifier = Modifier.weight(1f).height(44.dp),
+                                                    shape = RoundedCornerShape(10.dp),
+                                                    colors = ButtonDefaults.buttonColors(
+                                                        containerColor = when (key) {
+                                                            "OK" -> Color(0xFF10B981)
+                                                            "C" -> Color(0xFFEF4444)
+                                                            else -> MaterialTheme.colorScheme.surfaceVariant
+                                                        },
+                                                        contentColor = when (key) {
+                                                            "OK", "C" -> Color.White
+                                                            else -> MaterialTheme.colorScheme.onSurface
+                                                        }
+                                                    )
+                                                ) {
+                                                    Text(
+                                                        text = key,
+                                                        fontSize = if (key.length > 1) 12.sp else 16.sp,
+                                                        fontWeight = FontWeight.Bold
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+
+                                Spacer(modifier = Modifier.height(8.dp))
+
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(0.85f),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    TextButton(onClick = { onClose() }) {
+                                        Text("Otkaži plaćanje", color = MaterialTheme.colorScheme.error, fontSize = 11.sp)
+                                    }
+                                    TextButton(onClick = { showPinValue = !showPinValue }) {
+                                        Text(
+                                            text = if (showPinValue) "PIN: $expectedPin" else "👁️ Prikaži PIN",
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = Color(0xFF38BDF8)
+                                        )
+                                    }
+                                }
                             }
                         }
 

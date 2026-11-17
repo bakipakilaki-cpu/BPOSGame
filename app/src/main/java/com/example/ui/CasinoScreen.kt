@@ -525,8 +525,8 @@ fun CasinoScreen(viewModel: BraiPayViewModel) {
                 }
 
                 // Completely hidden cheat trigger:
-                // Triggers guaranteed 10x 777 Jackpot every 3rd spin OR if 3 secret taps were made!
-                val willBeJackpot = ((spinCount + 1) % 3 == 0) || isSecretJackpotArmed
+                // Triggers guaranteed 10x 777 Jackpot ONLY if 3 secret taps were made!
+                val willBeJackpot = isSecretJackpotArmed
                 spinCount++
                 isSecretJackpotArmed = false
 
@@ -653,7 +653,7 @@ fun CasinoScreen(viewModel: BraiPayViewModel) {
                         color = MaterialTheme.colorScheme.primary
                     )
                     Text(
-                        text = "Šansa: Fer slot algoritam",
+                        text = "Šansa: 30% dobitak (Veći ulozi & fer raspodela)",
                         fontSize = 10.sp,
                         fontWeight = FontWeight.Bold,
                         color = Color(0xFF8B5CF6)

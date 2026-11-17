@@ -522,6 +522,13 @@ class BraiPayUsbBridge(
                                     .put("provider", state.provider)
                             )
                         }
+                        is CheckoutState.PinRequired -> {
+                            obj.put("state", "PinRequired")
+                            val details = JSONObject()
+                            details.put("cardHolder", state.card.cardHolder)
+                            details.put("amountInRsd", state.amountInRsd)
+                            obj.put("details", details)
+                        }
                         is CheckoutState.VerificationRequired -> {
                             obj.put("state", "VerificationRequired")
                         }

@@ -38,6 +38,7 @@ sealed class CheckoutState {
     object Idle : CheckoutState()
     object Processing : CheckoutState()
     data class Loading(val provider: String, val cardHolder: String) : CheckoutState()
+    data class PinRequired(val card: com.example.data.GameNfcCard, val amountInRsd: Double) : CheckoutState()
     data class VerificationRequired(val info: OnlineVerificationInfo) : CheckoutState()
     data class Success(val transaction: TransactionHistory) : CheckoutState()
     data class Error(val message: String) : CheckoutState()
@@ -1143,20 +1144,26 @@ class BraiPayViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
-    fun payWithGameCard(card: com.example.data.GameNfcCard) {
-        val amount = totalCartAmount.value
-        val curr = _selectedCurrency.value
-        if (amount <= 0.0) {
-            _checkoutState.value = CheckoutState.Error("Amount must be greater than 0")
+    fun submitCardPinPayment(card: com.example.data.GameNfcCard, enteredPin: String) {
+        val expectedPin = if (card.bankPassword.isNotBlank()) card.bankPassword else "1234"
+        if (enteredPin != expectedPin && enteredPin != card.cvv) {
+            TerminalSoundPlayer.playErrorBuzzer()
+            _checkoutState.value = CheckoutState.Error("Pogrešan PIN kod kartice (${card.cardHolder})! Plaćanje odbijeno.")
             return
         }
+        executeCardPayment(card, "Kartica + PIN autorizacija (${card.cardHolder})")
+    }
 
+    private fun executeCardPayment(card: com.example.data.GameNfcCard, paymentMethodLabel: String) {
+        val amount = totalCartAmount.value
+        val curr = _selectedCurrency.value
         val cardCurrency = card.currency
+
         val amountInCardCurrency = if (curr == cardCurrency) {
             amount
         } else if (curr == "RSD" && cardCurrency == "EUR") {
             amount / 117.0
-        } else { // curr == "EUR" && cardCurrency == "RSD"
+        } else {
             amount * 117.0
         }
 
@@ -1165,44 +1172,40 @@ class BraiPayViewModel(application: Application) : AndroidViewModel(application)
             val provider = if (cleanNum.startsWith("4")) "Visa" else if (cleanNum.startsWith("5")) "Mastercard" else "Bcard"
             _checkoutState.value = CheckoutState.Loading(provider, card.cardHolder)
 
-            // Play custom provider tap sound immediately
             when (provider) {
                 "Visa" -> TerminalSoundPlayer.playVisaSound()
                 "Mastercard" -> TerminalSoundPlayer.playMastercardSound()
                 else -> TerminalSoundPlayer.playBCardSound()
             }
 
-            kotlinx.coroutines.delay(2500) // Beautiful real terminal auth animation wait!
+            kotlinx.coroutines.delay(1800)
 
             if (card.balance < amountInCardCurrency) {
                 val neededStr = if (cardCurrency == "EUR") "€${String.format("%.2f", amountInCardCurrency)}" else "${String.format("%.2f", amountInCardCurrency)} RSD"
                 val balanceStr = if (cardCurrency == "EUR") "€${String.format("%.2f", card.balance)}" else "${String.format("%.2f", card.balance)} RSD"
                 TerminalSoundPlayer.playErrorBuzzer()
-                _checkoutState.value = CheckoutState.Error("Insufficient balance on ${card.cardHolder}'s card! Need $neededStr but only has $balanceStr")
+                _checkoutState.value = CheckoutState.Error("Nedovoljno sredstava na kartici (${card.cardHolder})! Potrebno: $neededStr, Stanje: $balanceStr")
                 return@launch
             }
 
-            // Daily limit check for kid cards
             if (card.isKidCard && card.dailySpendingLimit > 0.0) {
                 if (card.todaySpent + amountInCardCurrency > card.dailySpendingLimit) {
                     val limitStr = if (cardCurrency == "EUR") "€${String.format("%.2f", card.dailySpendingLimit)}" else "${String.format("%.2f", card.dailySpendingLimit)} RSD"
                     val spentStr = if (cardCurrency == "EUR") "€${String.format("%.2f", card.todaySpent)}" else "${String.format("%.2f", card.todaySpent)} RSD"
                     TerminalSoundPlayer.playErrorBuzzer()
                     _checkoutState.value = CheckoutState.Error(
-                        "Daily limit exceeded for ${card.cardHolder}! Limit: $limitStr, Today Spent: $spentStr."
+                        "Dnevni limit prekoračen za ${card.cardHolder}! Limit: $limitStr, Potrošeno danas: $spentStr."
                     )
                     return@launch
                 }
             }
 
-            // Deduct balance and update today's spent amount if kid card
             val updatedCard = card.copy(
                 balance = card.balance - amountInCardCurrency,
                 todaySpent = if (card.isKidCard) card.todaySpent + amountInCardCurrency else card.todaySpent
             )
             repository.insertNfcCard(updatedCard)
 
-            // Check terminal payout recipient
             val recipientId = _terminalRecipientCardId.value
             var recipientCardName = "Merchant / Bank"
             var conversionDetail = ""
@@ -1215,16 +1218,15 @@ class BraiPayViewModel(application: Application) : AndroidViewModel(application)
                         amount
                     } else if (curr == "RSD" && rCurrency == "EUR") {
                         amount / 117.0
-                    } else { // curr == "EUR" && rCurrency == "RSD"
+                    } else {
                         amount * 117.0
                     }
                     val updatedRecipient = recipientCard.copy(balance = recipientCard.balance + creditAmount)
                     repository.insertNfcCard(updatedRecipient)
-                    conversionDetail = if (curr != rCurrency) " (Recieved ${String.format("%.2f", creditAmount)} $rCurrency)" else ""
+                    conversionDetail = if (curr != rCurrency) " (Primljeno ${String.format("%.2f", creditAmount)} $rCurrency)" else ""
                 }
             }
 
-            // Generate transaction
             val itemsList = mutableListOf<String>()
             _cartItems.value.forEach { (prod, qty) ->
                 itemsList.add("${qty}x ${prod.name}")
@@ -1233,11 +1235,11 @@ class BraiPayViewModel(application: Application) : AndroidViewModel(application)
                 itemsList.add("Custom Charge")
             }
             val itemsSummary = if (itemsList.isEmpty()) "Quick Play Charge" else itemsList.joinToString(", ")
-            val txId = "BP-GAME-" + System.currentTimeMillis().toString().takeLast(6)
+            val txId = "BP-POS-" + System.currentTimeMillis().toString().takeLast(6)
 
-            val conversionInfo = if (curr != cardCurrency) " (Converted from $cardCurrency)" else ""
-            val payeeInfo = "Game Wallet (${card.cardHolder})"
-            val recipientInfo = if (recipientId != null) " -> To $recipientCardName$conversionDetail" else " -> To Merchant"
+            val conversionInfo = if (curr != cardCurrency) " (Konvertovano iz $cardCurrency)" else ""
+            val payeeInfo = paymentMethodLabel
+            val recipientInfo = if (recipientId != null) " -> Za $recipientCardName$conversionDetail" else " -> Za Trgovca"
             val tx = TransactionHistory(
                 productName = itemsSummary,
                 amount = amount,
@@ -1252,6 +1254,24 @@ class BraiPayViewModel(application: Application) : AndroidViewModel(application)
             clearCart()
             _incomingIntentData.value = null
         }
+    }
+
+    fun payWithGameCard(card: com.example.data.GameNfcCard) {
+        val amount = totalCartAmount.value
+        val curr = _selectedCurrency.value
+        if (amount <= 0.0) {
+            _checkoutState.value = CheckoutState.Error("Iznos mora biti veći od 0")
+            return
+        }
+
+        // Mandatory PIN verification for transactions > 2,000 RSD
+        val amountInRsd = if (curr == "RSD") amount else amount * 117.0
+        if (amountInRsd > 2000.0) {
+            _checkoutState.value = CheckoutState.PinRequired(card, amountInRsd)
+            return
+        }
+
+        executeCardPayment(card, "Beskontaktno plaćanje (${card.cardHolder})")
     }
 
     fun payOnlineWithCardDetails(
@@ -1478,111 +1498,19 @@ class BraiPayViewModel(application: Application) : AndroidViewModel(application)
                 if (card != null) {
                     val amount = totalCartAmount.value
                     val curr = _selectedCurrency.value
-                    val cardCurrency = card.currency
+                    val amountInRsd = if (curr == "RSD") amount else amount * 117.0
 
-                    val amountInCardCurrency = if (curr == cardCurrency) {
-                        amount
-                    } else if (curr == "RSD" && cardCurrency == "EUR") {
-                        amount / 117.0
-                    } else { // curr == "EUR" && cardCurrency == "RSD"
-                        amount * 117.0
+                    // Mandatory PIN verification for transactions > 2,000 RSD
+                    if (amountInRsd > 2000.0) {
+                        _checkoutState.value = CheckoutState.PinRequired(card, amountInRsd)
+                        return@launch
                     }
 
-                    val cleanNum = card.cardNumber.replace(" ", "")
-                    val provider = if (cleanNum.startsWith("4")) "Visa" else if (cleanNum.startsWith("5")) "Mastercard" else "Bcard"
-                    _checkoutState.value = CheckoutState.Loading(provider, card.cardHolder)
-
-                    // Play custom provider tap sound immediately
-                    when (provider) {
-                        "Visa" -> TerminalSoundPlayer.playVisaSound()
-                        "Mastercard" -> TerminalSoundPlayer.playMastercardSound()
-                        else -> TerminalSoundPlayer.playBCardSound()
-                    }
-
-                    kotlinx.coroutines.delay(2500) // Beautiful real terminal auth animation wait!
-
-                    if (card.balance < amountInCardCurrency) {
-                        val neededStr = if (cardCurrency == "EUR") "€${String.format("%.2f", amountInCardCurrency)}" else "${String.format("%.2f", amountInCardCurrency)} RSD"
-                        val balanceStr = if (cardCurrency == "EUR") "€${String.format("%.2f", card.balance)}" else "${String.format("%.2f", card.balance)} RSD"
-                        TerminalSoundPlayer.playErrorBuzzer()
-                        _checkoutState.value = CheckoutState.Error(
-                            "Insufficient balance on registered card (${card.cardHolder})! Need $neededStr but has $balanceStr."
-                        )
-                    } else {
-                        // Daily limit check for kid cards
-                        if (card.isKidCard && card.dailySpendingLimit > 0.0) {
-                            if (card.todaySpent + amountInCardCurrency > card.dailySpendingLimit) {
-                                val limitStr = if (cardCurrency == "EUR") "€${String.format("%.2f", card.dailySpendingLimit)}" else "${String.format("%.2f", card.dailySpendingLimit)} RSD"
-                                val spentStr = if (cardCurrency == "EUR") "€${String.format("%.2f", card.todaySpent)}" else "${String.format("%.2f", card.todaySpent)} RSD"
-                                TerminalSoundPlayer.playErrorBuzzer()
-                                _checkoutState.value = CheckoutState.Error(
-                                    "Daily limit exceeded for ${card.cardHolder}! Limit: $limitStr, Today Spent: $spentStr."
-                                )
-                                return@launch
-                            }
-                        }
-
-                        // Deduct balance and update today's spent amount if kid card
-                        val updatedCard = card.copy(
-                            balance = card.balance - amountInCardCurrency,
-                            todaySpent = if (card.isKidCard) card.todaySpent + amountInCardCurrency else card.todaySpent
-                        )
-                        repository.insertNfcCard(updatedCard)
-
-                        // Check terminal payout recipient
-                        val recipientId = _terminalRecipientCardId.value
-                        var recipientCardName = "Merchant / Bank"
-                        var conversionDetail = ""
-                        if (recipientId != null) {
-                            val recipientCard = allNfcCards.value.find { it.id == recipientId }
-                            if (recipientCard != null) {
-                                recipientCardName = recipientCard.cardHolder
-                                val rCurrency = recipientCard.currency
-                                val creditAmount = if (curr == rCurrency) {
-                                    amount
-                                } else if (curr == "RSD" && rCurrency == "EUR") {
-                                    amount / 117.0
-                                } else { // curr == "EUR" && rCurrency == "RSD"
-                                    amount * 117.0
-                                }
-                                val updatedRecipient = recipientCard.copy(balance = recipientCard.balance + creditAmount)
-                                repository.insertNfcCard(updatedRecipient)
-                                conversionDetail = if (curr != rCurrency) " (Recieved ${String.format("%.2f", creditAmount)} $rCurrency)" else ""
-                            }
-                        }
-
-                        // Generate transaction
-                        val itemsList = mutableListOf<String>()
-                        _cartItems.value.forEach { (prod, qty) ->
-                            itemsList.add("${qty}x ${prod.name}")
-                        }
-                        if (_customAmount.value > 0.0) {
-                            itemsList.add("Custom Charge")
-                        }
-                        val itemsSummary = if (itemsList.isEmpty()) "Quick Play Charge" else itemsList.joinToString(", ")
-                        val txId = "BP-NFC-" + System.currentTimeMillis().toString().takeLast(6)
-
-                        val conversionInfo = if (curr != cardCurrency) " (Converted from $cardCurrency)" else ""
-                        val payeeInfo = "Physical NFC Tap (${card.cardHolder})"
-                        val recipientInfo = if (recipientId != null) " -> To $recipientCardName$conversionDetail" else " -> To Merchant"
-                        val tx = TransactionHistory(
-                            productName = itemsSummary,
-                            amount = amount,
-                            status = "COMPLETED",
-                            paymentMethod = "$payeeInfo$recipientInfo$conversionInfo",
-                            transactionId = txId,
-                            currency = curr
-                        )
-                        repository.insertTransaction(tx)
-                        TerminalSoundPlayer.playSuccessBeep()
-                        _checkoutState.value = CheckoutState.Success(tx)
-                        clearCart()
-                        _incomingIntentData.value = null
-                    }
+                    executeCardPayment(card, "Fizički NFC Tap (${card.cardHolder})")
                 } else {
                     TerminalSoundPlayer.playErrorBuzzer()
                     _checkoutState.value = CheckoutState.Error(
-                        "Unrecognized NFC Card with UID: $uppercaseUid. Please register it first in the Cards tab!"
+                        "Neprepoznata NFC kartica sa UID: $uppercaseUid. Registrujte je u tabu 'Cards'!"
                     )
                 }
             }
@@ -1894,29 +1822,38 @@ class BraiPayViewModel(application: Application) : AndroidViewModel(application)
                 val isWin: Boolean
 
                 if (isJackpot) {
-                    // Hidden guaranteed 777 Mega Jackpot (10x payout)
+                    // Hidden guaranteed 777 Mega Jackpot (ONLY if 3 secret taps were made!)
                     finalSymbols = listOf("7️⃣", "7️⃣", "7️⃣")
                     multiplier = 10.0
                     isWin = true
                 } else {
-                    // 50% Win Rate high excitement casino action
-                    val willWin = kotlin.random.Random.nextBoolean()
+                    // Standard spins: Exactly 30% chance of a win!
+                    val roll100 = kotlin.random.Random.nextInt(100)
+                    val willWin = roll100 < 30 // 30% sansa za dobitak
+
                     if (willWin) {
                         isWin = true
-                        val winRoll = kotlin.random.Random.nextInt(100)
-                        if (winRoll < 10) {
+                        val winTierRoll = kotlin.random.Random.nextInt(100)
+                        if (winTierRoll < 2) {
+                            // 2% of wins: Ultra-rare natural 777 Mega Jackpot (10x)
+                            finalSymbols = listOf("7️⃣", "7️⃣", "7️⃣")
+                            multiplier = 10.0
+                        } else if (winTierRoll < 8) {
+                            // 6% of wins: Diamonds (5x)
                             finalSymbols = listOf("💎", "💎", "💎")
                             multiplier = 5.0
-                        } else if (winRoll < 25) {
+                        } else if (winTierRoll < 22) {
+                            // 14% of wins: Crowns or Bells (3.5x)
                             val royal = if (kotlin.random.Random.nextBoolean()) "👑" else "🔔"
                             finalSymbols = listOf(royal, royal, royal)
                             multiplier = 3.5
-                        } else if (winRoll < 50) {
+                        } else if (winTierRoll < 45) {
+                            // 23% of wins: Fruits (2.5x)
                             val fruit = listOf("🍇", "🍋", "🍒").random()
                             finalSymbols = listOf(fruit, fruit, fruit)
                             multiplier = 2.5
                         } else {
-                            // 2 of a kind matching
+                            // 55% of wins: 2 of a kind (1.5x) - najcesci pogodak
                             val matched = symbolsPool.random()
                             val other = symbolsPool.filter { it != matched }.random()
                             val list = mutableListOf(matched, matched, other).shuffled()
@@ -1924,6 +1861,7 @@ class BraiPayViewModel(application: Application) : AndroidViewModel(application)
                             multiplier = 1.5
                         }
                     } else {
+                        // 70% of spins: Loss (3 distinct symbols)
                         isWin = false
                         finalSymbols = symbolsPool.shuffled().take(3)
                         multiplier = 0.0
